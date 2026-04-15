@@ -17,19 +17,7 @@ export default function Navbar() {
         height: 56,
       }}>
         {/* Logo */}
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div style={{
-            width: 28, height: 28, background: "var(--accent2)",
-            borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14,
-          }}>▶</div>
-          <span style={{
-            fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16,
-            color: "var(--text)", letterSpacing: "-0.02em",
-          }}>
-            YT<span style={{ color: "var(--accent)" }}>Analyser</span>
-          </span>
-        </Link>
+        
 
         {/* Nav Links */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
