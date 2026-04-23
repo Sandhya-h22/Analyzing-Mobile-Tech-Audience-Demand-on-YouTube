@@ -54,6 +54,18 @@ function ActionStep({ step }) {
           <span style={{fontSize:10,background:`${pc}22`,color:pc,border:`1px solid ${pc}44`,borderRadius:10,padding:"1px 8px",fontWeight:700,textTransform:"uppercase"}}>{step.priority}</span>
         </div>
         <div style={{fontSize:12,color:"var(--text-muted)"}}>{step.detail}</div>
+        {(step.evidence||[]).length>0&&(
+          <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+            {(step.evidence||[]).slice(0,2).map((evidence,index)=>(
+              <div key={`${evidence.author}-${index}`} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px"}}>
+                <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:4}}>@{evidence.author} · ðŸ‘ {evidence.likeCount||0}</div>
+                <div style={{fontSize:11,color:"var(--text)",lineHeight:1.5}}>
+                  "{evidence.text}{evidence.text?.length>=140?"â€¦":""}"
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -69,6 +81,7 @@ function DemandCard({ c, showVideo = false }) {
     programming_tutorials:"#3b82f6", ai_ml:"#8b5cf6", general_tech:"#94a3b8",
   };
   const stColor = subtopicColors[c.subtopic]||"#00d4ff";
+  const weight = Number(c.demandScore || 0);
 
   return (
     <div style={{
@@ -90,6 +103,17 @@ function DemandCard({ c, showVideo = false }) {
 
       {/* Author + meta */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+        <span style={{
+          background:`${stColor}22`,
+          color:stColor,
+          border:`1px solid ${stColor}44`,
+          borderRadius:10,
+          padding:"2px 8px",
+          fontSize:11,
+          fontWeight:800,
+        }}>
+          Weight: {weight}
+        </span>
         <span style={{fontSize:12,fontWeight:700,color:"var(--text-muted)"}}>@{c.author}</span>
         <SentBadge s={c.sentiment}/>
         {c.subtopic && (
@@ -155,7 +179,147 @@ function highlightDemandPhrases(text, matches) {
 }
 
 // ── Demand Comments Panel ─────────────────────────────────────────────────────
-function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comments" }) {
+function formatTopicLabel(topic) {
+  if (!topic) return "General";
+  return topic
+    .replace(/^smartphone_/, "")
+    .replace(/^programming_/, "")
+    .replace(/^ai_/, "ai ")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function buildDemandTopicChartData(comments) {
+  return Object.values((comments || []).reduce((acc, comment) => {
+    const key = comment.subtopic || comment.topicKey || comment.label || "general";
+    if (!acc[key]) acc[key] = { key, label: formatTopicLabel(key), count: 0, demandScore: 0 };
+    acc[key].count += 1;
+    acc[key].demandScore += Number(comment.demandScore || 0);
+    return acc;
+  }, {}))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return b.demandScore - a.demandScore;
+    })
+    .slice(0, 6);
+}
+
+function buildSentimentChartData(comments, sentimentStats) {
+  if (sentimentStats) {
+    return [
+      { name: "Positive", value: sentimentStats.positive || 0, color: SENT_COLORS.positive },
+      { name: "Negative", value: sentimentStats.negative || 0, color: SENT_COLORS.negative },
+      { name: "Neutral", value: sentimentStats.neutral || 0, color: SENT_COLORS.neutral },
+    ];
+  }
+
+  const totals = (comments || []).reduce((acc, comment) => {
+    const key = comment.sentiment || "neutral";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, { positive: 0, negative: 0, neutral: 0 });
+
+  return [
+    { name: "Positive", value: totals.positive || 0, color: SENT_COLORS.positive },
+    { name: "Negative", value: totals.negative || 0, color: SENT_COLORS.negative },
+    { name: "Neutral", value: totals.neutral || 0, color: SENT_COLORS.neutral },
+  ];
+}
+
+function DemandTopicChart({ comments }) {
+  const data = buildDemandTopicChartData(comments);
+
+  if (!data.length) return null;
+
+  return (
+    <div className="card" style={{padding:"16px 18px",minHeight:320}}>
+      <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"var(--font-display)",fontWeight:700,marginBottom:6}}>
+        Demand By Topic
+      </div>
+      <div style={{fontSize:12,color:"var(--text-muted)",marginBottom:14}}>
+        Most requested themes across the current demand comments
+      </div>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 22 }}>
+          <XAxis dataKey="label" tick={{fontSize:10,fill:"#94a3b8"}} interval={0} angle={-8} textAnchor="end" height={52} />
+          <YAxis tick={{fontSize:10,fill:"#94a3b8"}} allowDecimals={false} />
+          <Tooltip
+            cursor={{fill:"rgba(148,163,184,0.08)"}}
+            contentStyle={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:10,fontSize:11}}
+            formatter={(value, name, item) => name === "count" ? [`${value} comments`, item.payload.label] : [value, name]}
+            labelFormatter={label => label}
+          />
+          <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+            {data.map((entry, index) => <Cell key={entry.key} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function SentimentDonut({ comments, sentimentStats }) {
+  const data = buildSentimentChartData(comments, sentimentStats);
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  if (!data.length) return null;
+
+  return (
+    <div className="card" style={{padding:"16px 18px",minHeight:320}}>
+      <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"var(--font-display)",fontWeight:700,marginBottom:6}}>
+        Sentiment Analysis
+      </div>
+      <div style={{fontSize:12,color:"var(--text-muted)",marginBottom:14}}>
+        Circular breakdown of positive, negative, and neutral demand comments
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,alignItems:"center"}}>
+        <div style={{position:"relative",height:220}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} cx="50%" cy="50%" innerRadius={58} outerRadius={84} paddingAngle={3} dataKey="value" stroke="none">
+                {data.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+              </Pie>
+              <Tooltip
+                contentStyle={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:10,fontSize:11}}
+                formatter={(value, _name, item) => {
+                  const pct = Math.round((Number(value || 0) / Math.max(1, total)) * 100);
+                  return [`${value} comments (${pct}%)`, item?.payload?.name || "Sentiment"];
+                }}
+                labelFormatter={() => "Sentiment"}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",flexDirection:"column"}}>
+            <div style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:30,lineHeight:1,color:"var(--text)"}}>{total}</div>
+            <div style={{fontSize:11,color:"var(--text-muted)"}}>comments</div>
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {data.map((item) => {
+            const pct = Math.round((item.value / Math.max(1, total)) * 100);
+            return (
+              <div key={item.name} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:item.color,display:"inline-block"}} />
+                    <span style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{item.name}</span>
+                  </div>
+                  <span style={{fontSize:12,color:item.color,fontWeight:800}}>{pct}%</span>
+                </div>
+                <div className="progress-bar" style={{height:6,marginBottom:6}}>
+                  <div className="progress-fill" style={{width:`${pct}%`,background:item.color}} />
+                </div>
+                <div style={{fontSize:11,color:"var(--text-muted)"}}>{item.value} comments</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comments", sentimentStats = null }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("likes");
@@ -188,6 +352,13 @@ function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comment
           <span style={{marginLeft:10,fontSize:12,color:"var(--text-muted)"}}>{filtered.length} of {(comments||[]).length} shown</span>
         </div>
       </div>
+
+      {filtered.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginBottom:16}}>
+          <DemandTopicChart comments={filtered} />
+          <SentimentDonut comments={filtered} sentimentStats={sentimentStats} />
+        </div>
+      )}
 
       {/* Controls */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -242,12 +413,20 @@ function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comment
 }
 
 // ── Channels Dashboard ─────────────────────────────────────────────────────────
-function ChannelsDashboard({ data }) {
+function ChannelsDashboard({ data, onExport, exporting }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("Overview");
+  const [activeTab, setActiveTab] = useState("Topics");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const { channels, videos, aggregate, allDemandComments, skippedChannels } = data;
-  const TABS = ["Overview","Demand Comments","Videos","Channels"];
+  const TABS = ["Topics","Comments","Videos","Channels"];
+  const rankedTopics = (videos || [])
+    .filter(v => !v.error)
+    .flatMap(v => (v.topics || []).map(topic => ({
+      ...topic,
+      topicKey: `${v.videoId || v.metadata?.videoId || v.title}-${topic.topicKey}`,
+      sampleComments: topic.sampleComments || [],
+    })))
+    .sort((a, b) => (b.weightedScore || 0) - (a.weightedScore || 0));
 
   const sentStats = aggregate?.sentimentStats||{};
   const posRate = Math.round(((sentStats.positive||0)/Math.max(1,sentStats.total))*100);
@@ -276,7 +455,7 @@ function ChannelsDashboard({ data }) {
       <div style={{display:"flex",gap:4,marginBottom:20,borderBottom:"1px solid var(--border)"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setActiveTab(t)} style={{padding:"10px 16px",border:"none",background:"transparent",color:activeTab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:activeTab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}{t==="Demand Comments"&&allDemandComments?.length>0?` (${allDemandComments.length})`:""}
+            {t}{t==="Comments"&&allDemandComments?.length>0?` (${allDemandComments.length})`:""}
           </button>
         ))}
       </div>
@@ -304,6 +483,26 @@ function ChannelsDashboard({ data }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab==="Topics" && (
+        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:"var(--text-muted)"}}>
+              {rankedTopics.length} topic{rankedTopics.length !== 1 ? "s" : ""} ranked by weighted demand score
+            </div>
+            <button className="btn btn-secondary" disabled={exporting || !rankedTopics.length} onClick={()=>onExport("topics", rankedTopics)} style={{fontSize:11}}>
+              Export Topics CSV
+            </button>
+          </div>
+          {!rankedTopics.length ? (
+            <div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No demand topics found.</div>
+          ) : (
+            rankedTopics.slice(0, 20).map((topic, index) => (
+              <TopicCard key={topic.topicKey} topic={topic} rank={index + 1} />
+            ))
+          )}
         </div>
       )}
 
@@ -355,7 +554,7 @@ function ChannelsDashboard({ data }) {
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <span style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:15}}>🎯 Top Demand Comments</span>
-                <button className="btn btn-secondary" onClick={()=>setActiveTab("Demand Comments")} style={{fontSize:11}}>View All ({allDemandComments.length}) →</button>
+                <button className="btn btn-secondary" onClick={()=>setActiveTab("Comments")} style={{fontSize:11}}>View All ({allDemandComments.length}) →</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(allDemandComments||[]).slice(0,5).map((c,i)=><DemandCard key={c.commentId||i} c={c} showVideo={true}/>)}
@@ -366,8 +565,8 @@ function ChannelsDashboard({ data }) {
       )}
 
       {/* ── DEMAND COMMENTS ───────────────────────────────────────────────── */}
-      {activeTab==="Demand Comments" && (
-        <DemandPanel comments={allDemandComments||[]} showVideo={true} title="🎯 All Demand Comments" />
+      {activeTab==="Comments" && (
+        <DemandPanel comments={allDemandComments||[]} showVideo={true} sentimentStats={sentStats} title="🎯 Top Comments With Weight" />
       )}
 
       {/* ── VIDEOS ────────────────────────────────────────────────────────── */}
@@ -473,7 +672,14 @@ function CompareDashboard({ data, onExport, exporting }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const videos = (data.videos || []).filter(v => !v.error);
   const allDemandComments = data.allDemandComments || [];
-  const TABS = ["Overview", "Demand Comments", "Videos", "Raw"];
+  const TABS = ["Overview", "Comments", "Videos", "Raw"];
+  const rankedTopics = videos
+    .flatMap(v => (v.topics || []).map(topic => ({
+      ...topic,
+      topicKey: `${v.metadata?.videoId || v.url}-${topic.topicKey}`,
+      sampleComments: topic.sampleComments || [],
+    })))
+    .sort((a, b) => (b.weightedScore || 0) - (a.weightedScore || 0));
 
   const aggregate = videos.reduce((acc, video) => {
     acc.totalVideos += 1;
@@ -509,7 +715,7 @@ function CompareDashboard({ data, onExport, exporting }) {
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"1px solid var(--border)",overflowX:"auto"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setActiveTab(t)} style={{padding:"10px 14px",border:"none",background:"transparent",color:activeTab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:activeTab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}{t==="Demand Comments" && allDemandComments.length ? ` (${allDemandComments.length})` : ""}
+            {t}{t==="Comments" && allDemandComments.length ? ` (${allDemandComments.length})` : ""}
           </button>
         ))}
       </div>
@@ -556,8 +762,8 @@ function CompareDashboard({ data, onExport, exporting }) {
         </div>
       )}
 
-      {activeTab==="Demand Comments" && (
-        <DemandPanel comments={allDemandComments} showVideo={true} title={`Demand Comments — ${allDemandComments.length} found`}/>
+      {activeTab==="Comments" && (
+        <DemandPanel comments={allDemandComments} showVideo={true} sentimentStats={aggregate} title={`Top Comments With Weight — ${allDemandComments.length} found`}/>
       )}
 
       {activeTab==="Videos" && (
@@ -599,10 +805,9 @@ function CompareDashboard({ data, onExport, exporting }) {
 
 function SingleVideoDetails({ data, onExport, exporting }) {
   const router = useRouter();
-  const [tab, setTab] = useState("Overview");
+  const [tab, setTab] = useState("Topics");
   const [sentFilter, setSentFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const TABS = ["Overview","Demand Comments","Topics","Sentiment","Intents","Suggestions","Raw"];
+  const TABS = ["Topics","Keywords","Comments","Raw"];
 
   const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, intentSummary, suggestions, viralityScore, actionableSteps } = data;
 
@@ -624,7 +829,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"1px solid var(--border)",overflowX:"auto"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{padding:"10px 14px",border:"none",background:"transparent",color:tab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:tab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}{t==="Demand Comments"&&(demandComments||[]).length>0?` (${(demandComments||[]).length})`:""}
+            {t}
           </button>
         ))}
         <button className="btn btn-secondary" onClick={()=>router.push("/")} style={{fontSize:11,padding:"6px 12px",marginLeft:"auto",marginBottom:4}}>← Home</button>
@@ -682,7 +887,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
             <div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <span style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:15}}>🎯 Top Demand Comments</span>
-                <button className="btn btn-secondary" onClick={()=>setTab("Demand Comments")} style={{fontSize:11}}>View All ({(demandComments||[]).length}) →</button>
+                <button className="btn btn-secondary" onClick={()=>setTab("Comments")} style={{fontSize:11}}>View All ({(demandComments||[]).length}) →</button>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
                 {(demandComments||[]).slice(0,4).map((c,i)=><DemandCard key={c.commentId||i} c={c} showVideo={false}/>)}
@@ -701,13 +906,21 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       )}
 
       {/* ── DEMAND COMMENTS ────────────────────────────────────────────── */}
-      {tab==="Demand Comments"&&(
-        <DemandPanel comments={demandComments||[]} showVideo={false} title={`🎯 Demand Comments — ${(demandComments||[]).length} found`}/>
+      {tab==="Comments"&&(
+        <DemandPanel comments={demandComments||[]} showVideo={false} sentimentStats={sentimentStats} title={`🎯 Top Comments With Weight — ${(demandComments||[]).length} found`}/>
       )}
 
       {/* ── TOPICS ─────────────────────────────────────────────────────── */}
       {tab==="Topics"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:"var(--text-muted)"}}>
+              {(topics||[]).length} topic{(topics||[]).length !== 1 ? "s" : ""} ranked by weighted demand score
+            </div>
+            <button className="btn btn-secondary" disabled={exporting || !(topics||[]).length} onClick={()=>onExport("topics",topics||[])} style={{fontSize:11}}>
+              Export Topics CSV
+            </button>
+          </div>
           {!(topics||[]).length
             ?<div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No demand topics found.</div>
             :(topics||[]).map((t,i)=><TopicCard key={t.topicKey} topic={t} rank={i+1}/>)}
@@ -791,7 +1004,13 @@ function SingleVideoDetails({ data, onExport, exporting }) {
                     <div style={{minWidth:26,height:26,background:"var(--accent)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-display)",fontWeight:800,fontSize:12,color:"var(--bg)",flexShrink:0}}>#{i+1}</div>
                     <div>
                       <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:13,marginBottom:4}}>💡 {s.suggestion}</div>
-                      <div style={{fontSize:11,color:"var(--text-muted)"}}>Trigger: "{s.trigger}" · @{s.author} · 👍{s.likes}</div>
+                      <div style={{fontSize:11,color:"var(--text-muted)"}}>Trigger: "{s.trigger}" · {s.count||1} request(s) · {s.authorCount||1} viewer(s) · 👍{s.likes}</div>
+                      {(s.matchedComments||[])[0] && (
+                        <div style={{marginTop:8,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",fontSize:11,color:"var(--text)"}}>
+                          <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:4}}>@{s.matchedComments[0].author} · 👍{s.matchedComments[0].likeCount||0}</div>
+                          "{s.matchedComments[0].text}{s.matchedComments[0].text?.length>=140?"…":""}"
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -801,6 +1020,30 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       )}
 
       {/* ── RAW ────────────────────────────────────────────────────────── */}
+      {tab==="Keywords"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:"var(--text-muted)"}}>
+              {(topKeywords||[]).length} keyword{(topKeywords||[]).length !== 1 ? "s" : ""} extracted from demand comments
+            </div>
+            <button className="btn btn-secondary" disabled={exporting || !(topKeywords||[]).length} onClick={()=>onExport("keywords",topKeywords||[])} style={{fontSize:11}}>
+              Export Keywords CSV
+            </button>
+          </div>
+          {!(topKeywords||[]).length ? (
+            <div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No keywords found.</div>
+          ) : (
+            <div className="card" style={{display:"flex",flexWrap:"wrap",gap:10}}>
+              {(topKeywords||[]).map((kw, index) => (
+                <span key={`${kw.word}-${index}`} className="tag tag-accent" style={{fontSize:13,padding:"8px 12px"}}>
+                  {kw.word} <span style={{opacity:0.7}}>x{Number(kw.score || 0).toFixed(2)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {tab==="Raw"&&(
         <div className="card" style={{padding:0,overflow:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",borderBottom:"1px solid var(--border)"}}>
@@ -877,7 +1120,7 @@ export default function Dashboard() {
       <main style={{padding:"24px 0 60px"}}>
         <div className="container">
           {data.mode==="channels"
-            ?<ChannelsDashboard data={data}/>
+            ?<ChannelsDashboard data={data} onExport={handleExport} exporting={exporting}/>
             :data.mode==="compare"
               ?<CompareDashboard data={data} onExport={handleExport} exporting={exporting}/>
               :<SingleVideoDetails data={data} onExport={handleExport} exporting={exporting}/>}

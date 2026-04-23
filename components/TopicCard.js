@@ -9,9 +9,10 @@ export default function TopicCard({ topic, rank }) {
 
   return (
     <div className="card" style={{
-      borderLeft: `3px solid ${topic.color || "var(--accent)"}`,
+      borderLeft: `4px solid ${topic.color || "var(--accent)"}`,
       cursor: "pointer",
       transition: "all 0.2s",
+      padding: "24px 28px",
     }}
       onClick={() => setExpanded((e) => !e)}
     >
@@ -48,12 +49,13 @@ export default function TopicCard({ topic, rank }) {
               <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Weighted Score</span>
               <span style={{ fontSize: 11, color: topic.color, fontWeight: 700 }}>{pct}%</span>
             </div>
-            <div className="progress-bar">
+            <div className="progress-bar" style={{ height: 6, borderRadius: 999 }}>
               <div
                 className="progress-fill"
                 style={{
                   width: `${pct}%`,
                   background: `linear-gradient(90deg, ${topic.color}, ${topic.color}88)`,
+                  borderRadius: 999,
                 }}
               />
             </div>
@@ -84,9 +86,9 @@ export default function TopicCard({ topic, rank }) {
       </div>
 
       {/* Top words */}
-      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 4 }}>
+      <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
         {(topic.topWords || []).slice(0, 8).map(({ word, count }) => (
-          <span key={word} className="tag tag-accent" style={{ borderColor: `${topic.color}66`, color: topic.color }}>
+          <span key={word} className="tag tag-accent" style={{ borderColor: `${topic.color}66`, color: topic.color, padding: "6px 10px", fontSize: 13 }}>
             {word} <span style={{ opacity: 0.6 }}>×{count}</span>
           </span>
         ))}

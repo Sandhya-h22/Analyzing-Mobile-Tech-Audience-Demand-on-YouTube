@@ -1,4 +1,4 @@
-import { fetchVideoData, fetchRecentVideos, fetchVideoMetadata, fetchComments, fetchChannelInfo, resolveChannelId, TOP_MOBILE_CHANNELS } from "../../lib/youtube.js";
+import { fetchVideoData, fetchRecentVideos, fetchVideoMetadata, fetchComments, fetchChannelInfo, resolveChannelId } from "../../lib/youtube.js";
 import { processComments } from "../../lib/nlp.js";
 import { classifyComments, bucketComments } from "../../lib/classifier.js";
 import { analyseTopics } from "../../lib/tfidf.js";
@@ -13,7 +13,7 @@ const sanitize = (c) => ({
   intents: c.intents, primaryIntent: c.primaryIntent,
 });
 
-export async function analyseSingleVideo(url, apiKey, maxComments = 99999) {
+export async function analyseSingleVideo(url, apiKey, maxComments = Infinity) {
   const { metadata, comments: rawComments } = await fetchVideoData(url, maxComments, apiKey);
 
   if (!rawComments.length) {
@@ -28,12 +28,6 @@ export async function analyseSingleVideo(url, apiKey, maxComments = 99999) {
   const processed = processComments(rawComments);
   const classified = classifyComments(processed);
   const { techDemand, techNoDemand, nonTech } = bucketComments(classified);
-  const { topics, topKeywords } = analyseTopics(techDemand, 6);
-  const { comments: withSentiment, stats: sentimentStats, intentSummary } = processAllSentiments(classified);
-  const suggestions = extractContentSuggestions(techDemand);
-  const viralityScore = computeViralityScore(metadata, rawComments, sentimentStats);
-  const actionableSteps = generateActionableSteps(topics, sentimentStats, intentSummary, suggestions, viralityScore);
-
   const stats = {
     total: rawComments.length,
     tech: techDemand.length + techNoDemand.length,
@@ -42,9 +36,14 @@ export async function analyseSingleVideo(url, apiKey, maxComments = 99999) {
     techPercent: Math.round(((techDemand.length + techNoDemand.length) / rawComments.length) * 100),
     demandPercent: Math.round((techDemand.length / rawComments.length) * 100),
   };
+  const { topics, topKeywords } = analyseTopics(techDemand, 6);
+  const { comments: withSentiment, stats: sentimentStats, intentSummary } = processAllSentiments(classified);
+  const suggestions = extractContentSuggestions(withSentiment.filter(c => c.isTech));
+  const viralityScore = computeViralityScore(metadata, rawComments, sentimentStats, stats);
+  const actionableSteps = generateActionableSteps(topics, sentimentStats, intentSummary, suggestions, viralityScore, withSentiment);
 
   // Sort demand comments: by likeCount desc, then demandScore desc
-  const sortedDemand = [...techDemand].sort((a, b) =>
+  const sortedDemand = withSentiment.filter(c => c.isDemand).sort((a, b) =>
     (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10)
   );
 
@@ -87,7 +86,7 @@ export default async function handler(req, res) {
     if (mode === "compare") {
       const videoUrls = (urls || []).slice(0, 5);
       const results = await Promise.allSettled(
-        videoUrls.map(u => analyseSingleVideo(u, apiKey, 300))
+        videoUrls.map(u => analyseSingleVideo(u, apiKey, Infinity))
       );
       const videos = results.map((r, i) =>
         r.status === "fulfilled"
@@ -150,27 +149,26 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, mode: "channels", channels: resolvedChannels, videos: [], allDemandComments: [], aggregate: { totalVideos: 0, totalComments: 0, totalDemand: 0, daysBack }, message: `No videos found in last ${daysBack} days` });
       }
 
-      const commentsPerVideo = Math.max(100, Math.floor(2000 / allVideos.length));
-
       const analysed = await Promise.allSettled(
         allVideos.map(async (v) => {
-          const comments = await fetchComments(v.videoId, commentsPerVideo, apiKey);
+          const comments = await fetchComments(v.videoId, Infinity, apiKey);
           const metadata = await fetchVideoMetadata(v.videoId, apiKey);
           const processed = processComments(comments);
           const classified = classifyComments(processed);
           const { techDemand, techNoDemand, nonTech } = bucketComments(classified);
+          const stats = { total: comments.length, demand: techDemand.length, tech: techDemand.length + techNoDemand.length, nonTech: nonTech.length };
           const { topics, topKeywords } = analyseTopics(techDemand, 4);
           const { comments: withSent, stats: sentStats, intentSummary } = processAllSentiments(classified);
-          const viralityScore = computeViralityScore(metadata, comments, sentStats);
-          const suggestions = extractContentSuggestions(techDemand);
+          const viralityScore = computeViralityScore(metadata, comments, sentStats, stats);
+          const suggestions = extractContentSuggestions(withSent.filter(c => c.isTech));
 
-          const sortedDemand = [...techDemand].sort((a, b) =>
+          const sortedDemand = withSent.filter(c => c.isDemand).sort((a, b) =>
             (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10)
           );
 
           return {
             ...v, metadata,
-            stats: { total: comments.length, demand: techDemand.length, tech: techDemand.length + techNoDemand.length, nonTech: nonTech.length },
+            stats,
             topics: topics.map(t => ({ topicKey: t.topicKey, label: t.label, emoji: t.emoji, color: t.color, commentCount: t.commentCount, topWords: t.topWords, weightedScore: parseFloat((t.weightedScore||0).toFixed(4)), sampleComments: t.comments.slice(0,3).map(sanitize) })),
             topKeywords: topKeywords.slice(0, 15),
             sentimentStats: sentStats, intentSummary, viralityScore, suggestions,

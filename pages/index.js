@@ -105,7 +105,7 @@ export default function Home() {
       const res = await fetch("/api/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "compare", urls, maxComments: 300 }),
+        body: JSON.stringify({ mode: "compare", urls }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");

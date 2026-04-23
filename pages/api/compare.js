@@ -32,15 +32,24 @@ async function analyseOneVideo(videoId, apiKey, maxComments) {
   const processed  = processComments(rawComments);
   const classified = classifyComments(processed);
   const { techDemand, techNoDemand, nonTech } = bucketComments(classified);
+  const stats = {
+    total: rawComments.length,
+    tech: techDemand.length + techNoDemand.length,
+    demand: techDemand.length,
+    nonTech: nonTech.length,
+    techPercent: Math.round(((techDemand.length + techNoDemand.length) / rawComments.length) * 100),
+    demandPercent: Math.round((techDemand.length / rawComments.length) * 100),
+  };
   const { topics, topKeywords } = analyseTopics(techDemand, 4);
   const sentimentResult = processAllSentiments(classified);
-  const virality = computeViralityScore(metadata, rawComments, sentimentResult.stats);
+  const virality = computeViralityScore(metadata, rawComments, sentimentResult.stats, stats);
   const nextSteps = generateActionableSteps(
     topics,
     sentimentResult.stats,
     sentimentResult.intentSummary,
-    extractContentSuggestions(techDemand),
-    virality
+    extractContentSuggestions(sentimentResult.comments.filter(c => c.isTech)),
+    virality,
+    sentimentResult.comments
   );
   const topViralComments = [...sentimentResult.comments]
     .sort((a, b) => ((b.likeCount || 0) + (b.replyCount || 0)) - ((a.likeCount || 0) + (a.replyCount || 0)))
@@ -48,14 +57,7 @@ async function analyseOneVideo(videoId, apiKey, maxComments) {
 
   return {
     metadata,
-    stats: {
-      total:          rawComments.length,
-      tech:           techDemand.length + techNoDemand.length,
-      demand:         techDemand.length,
-      nonTech:        nonTech.length,
-      techPercent:    Math.round(((techDemand.length + techNoDemand.length) / rawComments.length) * 100),
-      demandPercent:  Math.round((techDemand.length / rawComments.length) * 100),
-    },
+    stats,
     topics: topics.map(t => ({
       topicKey: t.topicKey, label: t.label, emoji: t.emoji, color: t.color,
       commentCount: t.commentCount,
@@ -93,7 +95,7 @@ async function analyseOneVideo(videoId, apiKey, maxComments) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { videoIds = [], urls = [], maxComments = 100 } = req.body;
+  const { videoIds = [], urls = [], maxComments = Infinity } = req.body;
   const apiKey = process.env.YOUTUBE_API_KEY || process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "YOUTUBE_API_KEY not configured" });
 
