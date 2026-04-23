@@ -245,7 +245,9 @@ function DemandTopicChart({ comments }) {
           <YAxis tick={{fontSize:10,fill:"#94a3b8"}} allowDecimals={false} />
           <Tooltip
             cursor={{fill:"rgba(148,163,184,0.08)"}}
-            contentStyle={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:10,fontSize:11}}
+            contentStyle={{background:"#111827",border:"1px solid #334155",borderRadius:10,fontSize:11,color:"#f8fafc"}}
+            itemStyle={{color:"#f8fafc"}}
+            labelStyle={{color:"#f8fafc",fontWeight:700}}
             formatter={(value, name, item) => name === "count" ? [`${value} comments`, item.payload.label] : [value, name]}
             labelFormatter={label => label}
           />
@@ -280,7 +282,9 @@ function SentimentDonut({ comments, sentimentStats }) {
                 {data.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
               </Pie>
               <Tooltip
-                contentStyle={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:10,fontSize:11}}
+                contentStyle={{background:"#111827",border:"1px solid #334155",borderRadius:10,fontSize:11,color:"#f8fafc"}}
+                itemStyle={{color:"#f8fafc"}}
+                labelStyle={{color:"#f8fafc",fontWeight:700}}
                 formatter={(value, _name, item) => {
                   const pct = Math.round((Number(value || 0) / Math.max(1, total)) * 100);
                   return [`${value} comments (${pct}%)`, item?.payload?.name || "Sentiment"];

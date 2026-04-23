@@ -99,34 +99,50 @@ export default function Home() {
   // ── Compare: up to 5 custom video URLs ───────────────────────────────────
   async function handleCompare() {
     const urls = compareUrls.filter(u => u.trim());
-    if (urls.length < 2) { setError("Add at least 2 YouTube URLs to compare"); return; }
+    if (urls.length < 1) { setError("Add at least 1 YouTube URL to analyse"); return; }
     setError(""); setLoading(true); setStageLog([]);
     try {
+      const isSingleVideo = urls.length === 1;
       const res = await fetch("/api/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "compare", urls }),
+        body: JSON.stringify(
+          isSingleVideo
+            ? { mode: "single", url: urls[0] }
+            : { mode: "compare", urls }
+        ),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
-      saveHistory({
-        type: "compare",
-        label: `Compared ${urls.length} videos`,
-        channels: urls.map(u => u.slice(0, 50)),
-        totalVideos: urls.length,
-        totalComments: (data.videos || []).reduce((s, v) => s + (v.stats?.total || 0), 0),
-        topVideos: (data.videos || []).filter(v => !v.error).map(v => ({
-          title: v.metadata?.title || v.url,
-          channel: v.metadata?.channel || "",
-          thumbnail: v.metadata?.thumbnail || "",
-          stats: v.stats,
-          sentimentStats: v.sentimentStats,
-          viralityScore: v.viralityScore,
-          demandComments: (v.demandComments || []).slice(0, 5),
-        })),
-        data,
-      });
+      if (isSingleVideo) {
+        saveHistory({
+          type: "single",
+          label: data.metadata?.title || "Single Video Analysis",
+          channels: [data.metadata?.channel || urls[0]],
+          totalVideos: 1,
+          totalComments: data.stats?.total || 0,
+          data,
+        });
+      } else {
+        saveHistory({
+          type: "compare",
+          label: `Compared ${urls.length} videos`,
+          channels: urls.map(u => u.slice(0, 50)),
+          totalVideos: urls.length,
+          totalComments: (data.videos || []).reduce((s, v) => s + (v.stats?.total || 0), 0),
+          topVideos: (data.videos || []).filter(v => !v.error).map(v => ({
+            title: v.metadata?.title || v.url,
+            channel: v.metadata?.channel || "",
+            thumbnail: v.metadata?.thumbnail || "",
+            stats: v.stats,
+            sentimentStats: v.sentimentStats,
+            viralityScore: v.viralityScore,
+            demandComments: (v.demandComments || []).slice(0, 5),
+          })),
+          data,
+        });
+      }
 
       sessionStorage.setItem("yt_analysis", JSON.stringify(data));
       router.push("/dashboard");
@@ -268,13 +284,15 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <button className="btn btn-primary" onClick={handleCompare} disabled={loading || compareUrls.filter(u => u.trim()).length < 2} style={{ width: "100%", fontSize: 14, padding: "14px", justifyContent: "center" }}>
+                <button className="btn btn-primary" onClick={handleCompare} disabled={loading || compareUrls.filter(u => u.trim()).length < 1} style={{ width: "100%", fontSize: 14, padding: "14px", justifyContent: "center" }}>
                   {loading
-                    ? <><span className="spin" style={{ display: "inline-block" }}>⟳</span> Comparing videos…</>
-                    : `⚖️ Compare ${compareUrls.filter(u => u.trim()).length || 2} Videos`}
+                    ? <><span className="spin" style={{ display: "inline-block" }}>⟳</span> Analysing videos…</>
+                    : compareUrls.filter(u => u.trim()).length <= 1
+                      ? "🎬 Analyse 1 Video"
+                      : `⚖️ Compare ${compareUrls.filter(u => u.trim()).length} Videos`}
                 </button>
                 <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-dim)", textAlign: "center" }}>
-                  Minimum 2 URLs required · Maximum 5 videos
+                  Minimum 1 URL required · Maximum 5 videos
                 </div>
               </div>
             </div>

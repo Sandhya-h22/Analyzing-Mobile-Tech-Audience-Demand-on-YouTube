@@ -62,7 +62,7 @@ This project solves that problem by automating comment analysis and turning unst
   Main entry page for analysis modes such as trending, compare, and history.
 
 - `pages/dashboard.js`
-  Displays analysis results including sentiment, topics, suggestions, virality, and action steps.
+  Displays analysis results including synced sentiment metrics, demand-topic charts, ranked topics, suggestions, virality, and action steps.
 
 ### 6.2 API Routes
 
@@ -151,6 +151,7 @@ This stage:
 
 - Assigns each comment a positive, negative, or neutral sentiment.
 - Uses polarity word lists, negation handling, intensifiers, and emoji-based boosts.
+- Propagates sentiment labels into dashboard-ready comment objects used by demand views and exports.
 - Produces aggregate sentiment statistics:
   - positive count
   - negative count
@@ -239,7 +240,9 @@ Each suggestion may include evidence comments that justify the recommendation.
 - Channel-based recent video analysis
 - Search history using browser storage
 - Topic cards with ranked demand themes
-- Sentiment visualization
+- Demand-by-topic bar chart for demand comments
+- Circular sentiment visualization with hover details
+- Synced sentiment metrics between dashboard cards and graph
 - Intent summary
 - Suggestion extraction
 - Virality scoring
@@ -250,7 +253,9 @@ Each suggestion may include evidence comments that justify the recommendation.
 
 The dashboard presents:
 
-- sentiment charts
+- sentiment summary cards
+- circular sentiment chart with tooltip details
+- demand-by-topic bar graph
 - intent breakdown
 - ranked topic cards
 - demand comments
@@ -302,4 +307,3 @@ YTAnalyser successfully demonstrates how YouTube comments can be transformed int
 - `lib/tfidf.js` - topic analysis
 - `lib/sentiment.js` - sentiment, suggestions, virality, action steps
 - `pages/api/export.js` - CSV export
-
