@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+transformers==4.44.2
+torch>=2.2.0
+datasets==2.21.0
+accelerate==0.34.2
+sentence-transformers==3.0.1
+bertopic==0.16.3
+keybert==0.8.5
+scikit-learn==1.5.1
+numpy==1.26.4
+pydantic==2.8.2

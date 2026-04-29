@@ -1,16 +1,37 @@
 import { fetchVideoData, fetchRecentVideos, fetchVideoMetadata, fetchComments, fetchChannelInfo, resolveChannelId } from "../../lib/youtube.js";
 import { processComments } from "../../lib/nlp.js";
-import { classifyComments, bucketComments } from "../../lib/classifier.js";
-import { analyseTopics } from "../../lib/tfidf.js";
-import { processAllSentiments, extractContentSuggestions, computeViralityScore, generateActionableSteps } from "../../lib/sentiment.js";
+import { classifyCommentsWithML, bucketComments } from "../../lib/classifier.js";
+import { analyseTopicsWithML } from "../../lib/tfidf.js";
+import { processAllSentimentsWithML, extractContentSuggestions, computeViralityScore, generateActionableSteps } from "../../lib/sentiment.js";
 
 const sanitize = (c) => ({
-  commentId: c.commentId, author: c.author, text: c.text,
-  likeCount: c.likeCount, replyCount: c.replyCount, publishedAt: c.publishedAt,
-  processedText: c.processedText, isTech: c.isTech, isDemand: c.isDemand,
-  subtopic: c.subtopic, demandScore: c.demandScore, demandMatches: c.demandMatches,
-  sentiment: c.sentiment, magnitude: c.magnitude, sentimentScore: c.sentimentScore,
-  intents: c.intents, primaryIntent: c.primaryIntent,
+  commentId: c.commentId,
+  author: c.author,
+  text: c.text,
+  likeCount: c.likeCount,
+  replyCount: c.replyCount,
+  publishedAt: c.publishedAt,
+  processedText: c.processedText,
+  isTech: c.isTech,
+  isDemand: c.isDemand,
+  subtopic: c.subtopic,
+  demandScore: c.demandScore,
+  demandMatches: c.demandMatches,
+  sentiment: c.sentiment,
+  magnitude: c.magnitude,
+  sentimentScore: c.sentimentScore,
+  intents: c.intents,
+  primaryIntent: c.primaryIntent,
+});
+
+const buildAnalysisEngine = (...engines) => ({
+  mlActive: engines.some((engine) => engine?.mode === "ml"),
+  stages: engines.filter(Boolean).map((engine) => ({
+    stage: engine.stage,
+    mode: engine.mode,
+    provider: engine.provider,
+    model: engine.model || null,
+  })),
 });
 
 export async function analyseSingleVideo(url, apiKey, maxComments = Infinity) {
@@ -18,15 +39,23 @@ export async function analyseSingleVideo(url, apiKey, maxComments = Infinity) {
 
   if (!rawComments.length) {
     return {
-      metadata, stats: { total: 0, tech: 0, demand: 0, nonTech: 0, techPercent: 0, demandPercent: 0 },
-      topics: [], topKeywords: [], demandComments: [], allComments: [],
+      metadata,
+      stats: { total: 0, tech: 0, demand: 0, nonTech: 0, techPercent: 0, demandPercent: 0 },
+      topics: [],
+      topKeywords: [],
+      demandComments: [],
+      allComments: [],
       sentimentStats: { positive: 0, negative: 0, neutral: 0, total: 0, avgScore: 0 },
-      intentSummary: [], suggestions: [], viralityScore: { score: 0, label: "N/A", reasoning: "No comments" }, actionableSteps: [],
+      intentSummary: [],
+      suggestions: [],
+      viralityScore: { score: 0, label: "N/A", reasoning: "No comments" },
+      actionableSteps: [],
     };
   }
 
   const processed = processComments(rawComments);
-  const classified = classifyComments(processed);
+  const classificationResult = await classifyCommentsWithML(processed);
+  const classified = classificationResult.comments;
   const { techDemand, techNoDemand, nonTech } = bucketComments(classified);
   const stats = {
     total: rawComments.length,
@@ -36,34 +65,48 @@ export async function analyseSingleVideo(url, apiKey, maxComments = Infinity) {
     techPercent: Math.round(((techDemand.length + techNoDemand.length) / rawComments.length) * 100),
     demandPercent: Math.round((techDemand.length / rawComments.length) * 100),
   };
-  const { topics, topKeywords } = analyseTopics(techDemand, 6);
-  const { comments: withSentiment, stats: sentimentStats, intentSummary } = processAllSentiments(classified);
-  const suggestions = extractContentSuggestions(withSentiment.filter(c => c.isTech));
+  const topicResult = await analyseTopicsWithML(techDemand, 6);
+  const { topics, topKeywords } = topicResult;
+  const sentimentResult = await processAllSentimentsWithML(classified);
+  const { comments: withSentiment, stats: sentimentStats, intentSummary } = sentimentResult;
+  const suggestions = extractContentSuggestions(withSentiment.filter((c) => c.isTech));
   const viralityScore = computeViralityScore(metadata, rawComments, sentimentStats, stats);
   const actionableSteps = generateActionableSteps(topics, sentimentStats, intentSummary, suggestions, viralityScore, withSentiment);
+  const analysisEngine = buildAnalysisEngine(classificationResult.engine, sentimentResult.engine, topicResult.engine);
 
-  // Sort demand comments: by likeCount desc, then demandScore desc
-  const sortedDemand = withSentiment.filter(c => c.isDemand).sort((a, b) =>
-    (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10)
-  );
+  const sortedDemand = withSentiment
+    .filter((c) => c.isDemand)
+    .sort((a, b) => (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10));
 
-  const topicsClean = topics.map(t => ({
-    topicKey: t.topicKey, label: t.label, emoji: t.emoji, color: t.color,
-    commentCount: t.commentCount, topWords: t.topWords,
+  const topicsClean = topics.map((t) => ({
+    topicKey: t.topicKey,
+    label: t.label,
+    emoji: t.emoji,
+    color: t.color,
+    commentCount: t.commentCount,
+    topWords: t.topWords,
     weightedScore: parseFloat((t.weightedScore || 0).toFixed(4)),
     frequencyScore: parseFloat((t.frequencyScore || 0).toFixed(4)),
     engagementScore: parseFloat((t.engagementScore || 0).toFixed(4)),
     recencyScore: parseFloat((t.recencyScore || 0).toFixed(4)),
     diversityScore: parseFloat((t.diversityScore || 0).toFixed(4)),
     confidence: parseFloat((t.confidence || 0).toFixed(4)),
-    sampleComments: t.comments.slice(0, 5).map(sanitize),
+    sampleComments: (t.comments || []).slice(0, 5).map(sanitize),
   }));
 
   return {
-    metadata, stats, topics: topicsClean, topKeywords,
+    metadata,
+    stats,
+    topics: topicsClean,
+    topKeywords,
     demandComments: sortedDemand.slice(0, 200).map(sanitize),
     allComments: withSentiment.slice(0, 300).map(sanitize),
-    sentimentStats, intentSummary, suggestions, viralityScore, actionableSteps,
+    sentimentStats,
+    intentSummary,
+    analysisEngine,
+    suggestions,
+    viralityScore,
+    actionableSteps,
   };
 }
 
@@ -75,36 +118,36 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: "YOUTUBE_API_KEY is not configured." });
 
   try {
-    // ── Single video ─────────────────────────────────────────────────────────
     if (mode === "single") {
       if (!url) return res.status(400).json({ error: "URL required" });
       const data = await analyseSingleVideo(url, apiKey);
       return res.status(200).json({ success: true, mode: "single", ...data });
     }
 
-    // ── Compare videos ────────────────────────────────────────────────────────
     if (mode === "compare") {
       const videoUrls = (urls || []).slice(0, 5);
       const results = await Promise.allSettled(
-        videoUrls.map(u => analyseSingleVideo(u, apiKey, Infinity))
+        videoUrls.map((u) => analyseSingleVideo(u, apiKey, Infinity))
       );
-      const videos = results.map((r, i) =>
-        r.status === "fulfilled"
-          ? { ...r.value, url: videoUrls[i] }
-          : { error: r.reason?.message, url: videoUrls[i], metadata: { title: videoUrls[i] } }
+      const videos = results.map((result, i) =>
+        result.status === "fulfilled"
+          ? { ...result.value, url: videoUrls[i] }
+          : { error: result.reason?.message, url: videoUrls[i], metadata: { title: videoUrls[i] } }
       );
 
-      // Aggregate top demand comments across all videos (sorted by likes)
       const allDemandComments = videos
-        .filter(v => !v.error)
-        .flatMap(v => (v.demandComments || []).map(c => ({ ...c, videoTitle: v.metadata?.title, videoChannel: v.metadata?.channel })))
-        .sort((a, b) => (b.likeCount + (b.demandScore||0)*10) - (a.likeCount + (a.demandScore||0)*10))
+        .filter((video) => !video.error)
+        .flatMap((video) => (video.demandComments || []).map((comment) => ({
+          ...comment,
+          videoTitle: video.metadata?.title,
+          videoChannel: video.metadata?.channel,
+        })))
+        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10))
         .slice(0, 100);
 
       return res.status(200).json({ success: true, mode: "compare", videos, allDemandComments });
     }
 
-    // ── Channels mode ─────────────────────────────────────────────────────────
     if (mode === "channels") {
       const channelList = channels || [];
       if (!channelList.length) return res.status(400).json({ error: "No channels provided" });
@@ -117,7 +160,7 @@ export default async function handler(req, res) {
         })
       );
 
-      const resolvedChannels = channelInfos.filter(r => r.status === "fulfilled").map(r => r.value);
+      const resolvedChannels = channelInfos.filter((result) => result.status === "fulfilled").map((result) => result.value);
       const skippedChannels = channelInfos
         .map((result, index) => (
           result.status === "rejected"
@@ -128,17 +171,18 @@ export default async function handler(req, res) {
             : null
         ))
         .filter(Boolean);
+
       if (!resolvedChannels.length) return res.status(400).json({ error: "Could not resolve any channels" });
 
       const videoLists = await Promise.allSettled(
-        resolvedChannels.map(ch => fetchRecentVideos(ch.id, daysBack, 10, apiKey))
+        resolvedChannels.map((ch) => fetchRecentVideos(ch.id, daysBack, 10, apiKey))
       );
 
       const allVideos = [];
       videoLists.forEach((result, i) => {
         if (result.status === "fulfilled") {
-          result.value.forEach(v => allVideos.push({
-            ...v,
+          result.value.forEach((video) => allVideos.push({
+            ...video,
             channelName: resolvedChannels[i].name,
             channelThumbnail: resolvedChannels[i].thumbnail,
           }));
@@ -146,80 +190,140 @@ export default async function handler(req, res) {
       });
 
       if (!allVideos.length) {
-        return res.status(200).json({ success: true, mode: "channels", channels: resolvedChannels, videos: [], allDemandComments: [], aggregate: { totalVideos: 0, totalComments: 0, totalDemand: 0, daysBack }, message: `No videos found in last ${daysBack} days` });
+        return res.status(200).json({
+          success: true,
+          mode: "channels",
+          channels: resolvedChannels,
+          videos: [],
+          allDemandComments: [],
+          aggregate: { totalVideos: 0, totalComments: 0, totalDemand: 0, daysBack },
+          message: `No videos found in last ${daysBack} days`,
+        });
       }
 
       const analysed = await Promise.allSettled(
-        allVideos.map(async (v) => {
-          const comments = await fetchComments(v.videoId, Infinity, apiKey);
-          const metadata = await fetchVideoMetadata(v.videoId, apiKey);
+        allVideos.map(async (video) => {
+          const comments = await fetchComments(video.videoId, Infinity, apiKey);
+          const metadata = await fetchVideoMetadata(video.videoId, apiKey);
           const processed = processComments(comments);
-          const classified = classifyComments(processed);
+          const classificationResult = await classifyCommentsWithML(processed);
+          const classified = classificationResult.comments;
           const { techDemand, techNoDemand, nonTech } = bucketComments(classified);
           const stats = { total: comments.length, demand: techDemand.length, tech: techDemand.length + techNoDemand.length, nonTech: nonTech.length };
-          const { topics, topKeywords } = analyseTopics(techDemand, 4);
-          const { comments: withSent, stats: sentStats, intentSummary } = processAllSentiments(classified);
+          const topicResult = await analyseTopicsWithML(techDemand, 4);
+          const { topics, topKeywords } = topicResult;
+          const sentimentResult = await processAllSentimentsWithML(classified);
+          const { comments: withSent, stats: sentStats, intentSummary } = sentimentResult;
           const viralityScore = computeViralityScore(metadata, comments, sentStats, stats);
-          const suggestions = extractContentSuggestions(withSent.filter(c => c.isTech));
+          const suggestions = extractContentSuggestions(withSent.filter((c) => c.isTech));
+          const analysisEngine = buildAnalysisEngine(classificationResult.engine, sentimentResult.engine, topicResult.engine);
 
-          const sortedDemand = withSent.filter(c => c.isDemand).sort((a, b) =>
-            (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10)
-          );
+          const sortedDemand = withSent
+            .filter((c) => c.isDemand)
+            .sort((a, b) => (b.likeCount + b.demandScore * 10) - (a.likeCount + a.demandScore * 10));
 
           return {
-            ...v, metadata,
+            ...video,
+            metadata,
             stats,
-            topics: topics.map(t => ({ topicKey: t.topicKey, label: t.label, emoji: t.emoji, color: t.color, commentCount: t.commentCount, topWords: t.topWords, weightedScore: parseFloat((t.weightedScore||0).toFixed(4)), sampleComments: t.comments.slice(0,3).map(sanitize) })),
+            topics: topics.map((topic) => ({
+              topicKey: topic.topicKey,
+              label: topic.label,
+              emoji: topic.emoji,
+              color: topic.color,
+              commentCount: topic.commentCount,
+              topWords: topic.topWords,
+              weightedScore: parseFloat((topic.weightedScore || 0).toFixed(4)),
+              sampleComments: (topic.comments || []).slice(0, 3).map(sanitize),
+            })),
             topKeywords: topKeywords.slice(0, 15),
-            sentimentStats: sentStats, intentSummary, viralityScore, suggestions,
+            sentimentStats: sentStats,
+            intentSummary,
+            analysisEngine,
+            viralityScore,
+            suggestions,
             allComments: withSent.slice(0, 100).map(sanitize),
             demandComments: sortedDemand.slice(0, 80).map(sanitize),
           };
         })
       );
 
-      const videoResults = analysed.map((r, i) =>
-        r.status === "fulfilled" ? r.value : { ...allVideos[i], error: r.reason?.message }
+      const videoResults = analysed.map((result, i) =>
+        result.status === "fulfilled"
+          ? result.value
+          : {
+              ...allVideos[i],
+              error: "Video analysis failed",
+              errorDetail: result.reason?.message || "Unknown analysis error",
+            }
       );
 
-      const totalSentiment = videoResults.filter(v => !v.error).reduce((acc, v) => {
-        acc.positive += v.sentimentStats?.positive || 0;
-        acc.negative += v.sentimentStats?.negative || 0;
-        acc.neutral  += v.sentimentStats?.neutral  || 0;
-        acc.total    += v.sentimentStats?.total    || 0;
+      const successfulVideos = videoResults.filter((video) => !video.error);
+      const failedVideos = videoResults
+        .filter((video) => video.error)
+        .map((video) => ({
+          videoId: video.videoId,
+          title: video.metadata?.title || video.title || "Unknown video",
+          channel: video.channelName,
+          error: video.error,
+          errorDetail: video.errorDetail || video.error,
+        }));
+
+      const totalSentiment = successfulVideos.reduce((acc, video) => {
+        acc.positive += video.sentimentStats?.positive || 0;
+        acc.negative += video.sentimentStats?.negative || 0;
+        acc.neutral += video.sentimentStats?.neutral || 0;
+        acc.total += video.sentimentStats?.total || 0;
         return acc;
       }, { positive: 0, negative: 0, neutral: 0, total: 0 });
 
-      const topVideosByVirality = [...videoResults].filter(v => !v.error).sort((a, b) => (b.viralityScore?.score||0) - (a.viralityScore?.score||0));
-      const topVideosByDemand   = [...videoResults].filter(v => !v.error).sort((a, b) => (b.stats?.demand||0) - (a.stats?.demand||0));
+      const topVideosByVirality = [...successfulVideos].sort((a, b) => (b.viralityScore?.score || 0) - (a.viralityScore?.score || 0));
+      const topVideosByDemand = [...successfulVideos].sort((a, b) => (b.stats?.demand || 0) - (a.stats?.demand || 0));
 
-      // Aggregate ALL demand comments across all videos sorted by engagement
-      const allDemandComments = videoResults
-        .filter(v => !v.error)
-        .flatMap(v => (v.demandComments || []).map(c => ({
-          ...c,
-          videoTitle: v.metadata?.title || v.title,
-          videoChannel: v.channelName,
-          videoThumbnail: v.metadata?.thumbnail || v.thumbnail,
+      const allDemandComments = successfulVideos
+        .flatMap((video) => (video.demandComments || []).map((comment) => ({
+          ...comment,
+          videoTitle: video.metadata?.title || video.title,
+          videoChannel: video.channelName,
+          videoThumbnail: video.metadata?.thumbnail || video.thumbnail,
         })))
-        .sort((a, b) => (b.likeCount + (b.demandScore||0)*10) - (a.likeCount + (a.demandScore||0)*10))
+        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10))
         .slice(0, 150);
 
       return res.status(200).json({
-        success: true, mode: "channels",
+        success: true,
+        mode: "channels",
         channels: resolvedChannels,
         skippedChannels,
         videos: videoResults,
+        failedVideos,
         allDemandComments,
         aggregate: {
-          totalVideos: videoResults.length,
-          totalComments: videoResults.reduce((s,v) => s+(v.stats?.total||0),0),
-          totalDemand: videoResults.reduce((s,v) => s+(v.stats?.demand||0),0),
+          discoveredVideos: allVideos.length,
+          totalVideos: successfulVideos.length,
+          successfulVideos: successfulVideos.length,
+          failedVideoCount: failedVideos.length,
+          totalComments: successfulVideos.reduce((sum, video) => sum + (video.stats?.total || 0), 0),
+          totalDemand: successfulVideos.reduce((sum, video) => sum + (video.stats?.demand || 0), 0),
           sentimentStats: totalSentiment,
-          topVideosByVirality: topVideosByVirality.slice(0,5).map(v => ({ title: v.metadata?.title||v.title, channel: v.channelName, viralityScore: v.viralityScore, stats: v.stats, thumbnail: v.metadata?.thumbnail||v.thumbnail })),
-          topVideosByDemand:   topVideosByDemand.slice(0,5).map(v => ({ title: v.metadata?.title||v.title, channel: v.channelName, stats: v.stats, thumbnail: v.metadata?.thumbnail||v.thumbnail })),
+          topVideosByVirality: topVideosByVirality.slice(0, 5).map((video) => ({
+            title: video.metadata?.title || video.title,
+            channel: video.channelName,
+            viralityScore: video.viralityScore,
+            stats: video.stats,
+            thumbnail: video.metadata?.thumbnail || video.thumbnail,
+          })),
+          topVideosByDemand: topVideosByDemand.slice(0, 5).map((video) => ({
+            title: video.metadata?.title || video.title,
+            channel: video.channelName,
+            stats: video.stats,
+            thumbnail: video.metadata?.thumbnail || video.thumbnail,
+          })),
           daysBack,
         },
+        warning: failedVideos.length
+          ? `Some videos could not be fully analysed. ${successfulVideos.length} succeeded and ${failedVideos.length} failed.`
+          : null,
       });
     }
 

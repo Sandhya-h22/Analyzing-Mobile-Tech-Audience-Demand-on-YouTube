@@ -13,6 +13,10 @@ yarn-error.log*
 # Environment variables
 .env
 .env.local
+ml-service/.venv/
+ml-service/models/
+ml-service/__pycache__/
+ml-service/.pytest_cache/
 
 # OS files
 .DS_Store

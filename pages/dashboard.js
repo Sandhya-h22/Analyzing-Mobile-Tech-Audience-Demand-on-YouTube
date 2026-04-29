@@ -43,6 +43,74 @@ function ViralityMeter({ score, label, reasoning }) {
   );
 }
 
+function summarizeStageLabel(stage) {
+  return (stage || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function aggregateAnalysisEngine(engines = []) {
+  const valid = engines.filter(Boolean);
+  const stageMap = new Map();
+
+  valid.forEach((engine) => {
+    (engine.stages || []).forEach((stage) => {
+      const existing = stageMap.get(stage.stage) || { ...stage, mlCount: 0, total: 0 };
+      existing.total += 1;
+      if (stage.mode === "ml") existing.mlCount += 1;
+      existing.provider = existing.provider || stage.provider;
+      existing.model = existing.model || stage.model;
+      existing.mode = existing.mlCount > 0 ? "ml" : "rule-based";
+      stageMap.set(stage.stage, existing);
+    });
+  });
+
+  return {
+    mlActive: valid.some((engine) => engine.mlActive),
+    stages: [...stageMap.values()],
+  };
+}
+
+function AnalysisEngineCard({ engine, title = "ML Integration" }) {
+  const stages = engine?.stages || [];
+  if (!stages.length) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: 20, borderLeft: `3px solid ${engine?.mlActive ? "#10b981" : "#6b7a99"}`, padding: "14px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 4 }}>
+            {title}
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 14, color: engine?.mlActive ? "#10b981" : "#94a3b8" }}>
+            {engine?.mlActive ? "ML-assisted pipeline active" : "Fallback rule-based pipeline"}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {stages.map((stage) => (
+          <div key={stage.stage} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", minWidth: 170 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text)" }}>{summarizeStageLabel(stage.stage)}</span>
+              <span style={{ fontSize: 10, color: stage.mode === "ml" ? "#10b981" : "#94a3b8", fontWeight: 800, textTransform: "uppercase" }}>
+                {stage.mode}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
+              {stage.model || stage.provider || "Local pipeline"}
+            </div>
+            {typeof stage.mlCount === "number" && stage.total > 1 && (
+              <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+                {stage.mlCount} / {stage.total} video runs used ML
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ActionStep({ step }) {
   const pc={high:"#ef4444",medium:"#f59e0b",low:"#10b981"}[step.priority]||"#6b7a99";
   return (
@@ -433,6 +501,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
     .sort((a, b) => (b.weightedScore || 0) - (a.weightedScore || 0));
 
   const sentStats = aggregate?.sentimentStats||{};
+  const engineSummary = aggregateAnalysisEngine((videos || []).map((video) => video.analysisEngine));
   const posRate = Math.round(((sentStats.positive||0)/Math.max(1,sentStats.total))*100);
   const negRate = Math.round(((sentStats.negative||0)/Math.max(1,sentStats.total))*100);
   const sentPie = [
@@ -475,6 +544,8 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       </div>
 
       {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
+      <AnalysisEngineCard engine={engineSummary} title="ML Integration Across Channel Runs" />
+
       {(skippedChannels || []).length > 0 && (
         <div className="card" style={{marginBottom:20,borderLeft:"3px solid #f59e0b",padding:"12px 14px"}}>
           <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:13,marginBottom:6,color:"#f59e0b"}}>
@@ -700,6 +771,7 @@ function CompareDashboard({ data, onExport, exporting }) {
   const negativeRate = Math.round((aggregate.negative / Math.max(1, aggregate.sentimentTotal)) * 100);
   const topByDemand = [...videos].sort((a, b) => (b.stats?.demand || 0) - (a.stats?.demand || 0));
   const topByVirality = [...videos].sort((a, b) => (b.viralityScore?.score || 0) - (a.viralityScore?.score || 0));
+  const engineSummary = aggregateAnalysisEngine(videos.map((video) => video.analysisEngine));
 
   return (
     <div>
@@ -732,6 +804,8 @@ function CompareDashboard({ data, onExport, exporting }) {
         <StatCard label="Negative" value={`${negativeRate}%`} icon="😤" color="#ef4444"/>
         <StatCard label="Topics" value={videos.reduce((sum, v) => sum + (v.topics?.length || 0), 0)} icon="📋" color="var(--accent3)"/>
       </div>
+
+      <AnalysisEngineCard engine={engineSummary} title="ML Integration Across Compared Videos" />
 
       {activeTab==="Overview" && (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -813,7 +887,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
   const [sentFilter, setSentFilter] = useState("all");
   const TABS = ["Topics","Keywords","Comments","Raw"];
 
-  const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, intentSummary, suggestions, viralityScore, actionableSteps } = data;
+  const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, intentSummary, suggestions, viralityScore, actionableSteps, analysisEngine } = data;
 
   const sentPieData=[
     {name:"Positive",value:sentimentStats?.positive||0,color:"#10b981"},
@@ -865,6 +939,8 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       </div>
 
       {/* ── OVERVIEW ───────────────────────────────────────────────────── */}
+      <AnalysisEngineCard engine={analysisEngine} title="ML Integration For This Analysis" />
+
       {tab==="Overview"&&(
         <div>
           <div style={{marginBottom:14}}><ViralityMeter score={viralityScore?.score||0} label={viralityScore?.label||""} reasoning={viralityScore?.reasoning||""}/></div>
