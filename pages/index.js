@@ -30,13 +30,24 @@ function timeAgo(iso) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+async function readApiJson(res) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const title = text.match(/<title>(.*?)<\/title>/i)?.[1];
+    throw new Error(title || `Server returned ${res.status} ${res.statusText || "non-JSON response"}`);
+  }
+}
+
 export default function Home() {
   const router = useRouter();
 
-  // Mode: "trending" | "compare" | "history"
+  // Mode: "trending" | "compare" | "benchmark" | "history"
   const [mode, setMode]               = useState("trending");
   const [singleUrl, setSingleUrl]     = useState("");
   const [compareUrls, setCompareUrls] = useState(["", "", "", "", ""]);
+  const [benchmarkChannels, setBenchmarkChannels] = useState(["", "", ""]);
   const [daysBack, setDaysBack]       = useState(7);
   const [loading, setLoading]         = useState(false);
   const [activeStage, setActiveStage] = useState(-1);
@@ -45,6 +56,7 @@ export default function Home() {
   const [history, setHistory]         = useState([]);
   const [histSearch, setHistSearch]   = useState("");
   const [expandedEntry, setExpandedEntry] = useState(null);
+  const [mobileFocus, setMobileFocus] = useState("");
 
   useEffect(() => {
     try { setHistory(JSON.parse(localStorage.getItem("yt_history") || "[]")); } catch {}
@@ -76,15 +88,17 @@ export default function Home() {
           mode: "channels",
           channels: TOP_CHANNELS.map(c => ({ id: c.id, name: c.name })),
           daysBack,
+          domainKey,
+          mobileFocus,
         }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
       // Save to history
       saveHistory({
         type: "channels",
-        label: `Top 5 Mobile Channels — Last ${daysBack} day(s)`,
+        label: `Top 5 Mobile Channels${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
         channels: TOP_CHANNELS.map(c => c.name),
         totalVideos: data.aggregate?.totalVideos || 0,
         totalComments: data.aggregate?.totalComments || 0,
@@ -98,51 +112,66 @@ export default function Home() {
 
   // ── Compare: up to 5 custom video URLs ───────────────────────────────────
   async function handleCompare() {
-    const urls = compareUrls.filter(u => u.trim());
+    const urls = [...new Set(compareUrls.map(u => u.trim()).filter(Boolean))];
     if (urls.length < 1) { setError("Add at least 1 YouTube URL to analyse"); return; }
     setError(""); setLoading(true); setStageLog([]);
     try {
-      const isSingleVideo = urls.length === 1;
       const res = await fetch("/api/analyse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          isSingleVideo
-            ? { mode: "single", url: urls[0] }
-            : { mode: "compare", urls }
-        ),
+        body: JSON.stringify({ mode: "compare", urls, domainKey, mobileFocus }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
-      if (isSingleVideo) {
-        saveHistory({
-          type: "single",
-          label: data.metadata?.title || "Single Video Analysis",
-          channels: [data.metadata?.channel || urls[0]],
-          totalVideos: 1,
-          totalComments: data.stats?.total || 0,
-          data,
-        });
-      } else {
-        saveHistory({
-          type: "compare",
-          label: `Compared ${urls.length} videos`,
-          channels: urls.map(u => u.slice(0, 50)),
-          totalVideos: urls.length,
-          totalComments: (data.videos || []).reduce((s, v) => s + (v.stats?.total || 0), 0),
-          topVideos: (data.videos || []).filter(v => !v.error).map(v => ({
-            title: v.metadata?.title || v.url,
-            channel: v.metadata?.channel || "",
-            thumbnail: v.metadata?.thumbnail || "",
-            stats: v.stats,
-            sentimentStats: v.sentimentStats,
-            viralityScore: v.viralityScore,
-            demandComments: (v.demandComments || []).slice(0, 5),
-          })),
-          data,
-        });
-      }
+      saveHistory({
+        type: "compare",
+        label: urls.length === 1
+          ? `Analysed 1 video${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""}`
+          : `Compared ${urls.length} videos${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""}`,
+        channels: urls.map(u => u.slice(0, 50)),
+        totalVideos: urls.length,
+        totalComments: (data.videos || []).reduce((s, v) => s + (v.stats?.total || 0), 0),
+        topVideos: (data.videos || []).filter(v => !v.error).map(v => ({
+          title: v.metadata?.title || v.url,
+          channel: v.metadata?.channel || "",
+          thumbnail: v.metadata?.thumbnail || "",
+          stats: v.stats,
+          sentimentStats: v.sentimentStats,
+          viralityScore: v.viralityScore,
+          demandComments: (v.demandComments || []).slice(0, 5),
+        })),
+        data,
+      });
+
+      sessionStorage.setItem("yt_analysis", JSON.stringify(data));
+      router.push("/dashboard");
+    } catch (err) { setError(err.message); setLoading(false); }
+  }
+
+  async function handleBenchmark() {
+    const inputs = benchmarkChannels
+      .filter(c => c.trim())
+      .map((input, index) => ({ input, name: index === 0 ? "Your Channel" : `Competitor ${index}` }));
+    if (inputs.length < 2) { setError("Add your channel and at least one competitor"); return; }
+    setError(""); setLoading(true); setStageLog([]);
+    try {
+      const res = await fetch("/api/analyse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "channels", channels: inputs, daysBack, domainKey, mobileFocus }),
+      });
+      const data = await readApiJson(res);
+      if (!res.ok || !data.success) throw new Error(data.error || "Benchmark failed");
+
+      saveHistory({
+        type: "channels",
+        label: `Channel benchmark${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
+        channels: inputs.map(c => c.input),
+        totalVideos: data.aggregate?.totalVideos || 0,
+        totalComments: data.aggregate?.totalComments || 0,
+        data,
+      });
 
       sessionStorage.setItem("yt_analysis", JSON.stringify(data));
       router.push("/dashboard");
@@ -176,6 +205,7 @@ export default function Home() {
   );
 
   const typeColors = { channels: "#f59e0b", compare: "#7c3aed", single: "#00d4ff" };
+  const domainKey = "tech";
 
   return (
     <>
@@ -203,6 +233,7 @@ export default function Home() {
             {[
               { key: "trending", label: "🔥 Trending Videos",       desc: "Top 5 mobile channels · auto-fetch" },
               { key: "compare",  label: "⚖️ Compare Top 5 Videos",  desc: "Paste up to 5 video URLs"           },
+              { key: "benchmark", label: "Benchmark Channels", desc: "Your channel vs competitors" },
               { key: "history",  label: `🕐 Search History ${history.length > 0 ? `(${history.length})` : ""}`, desc: "Your past analyses" },
             ].map(({ key, label, desc }) => (
               <button
@@ -225,6 +256,34 @@ export default function Home() {
           </div>
 
           {/* ── TRENDING MODE ────────────────────────────────────────────────── */}
+          {mode !== "history" && (
+            <div className="card" style={{ padding: 16, marginBottom: 22 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ minWidth: 150 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-display)", fontWeight: 700 }}>
+                    Phone filter
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 3 }}>
+                    Optional
+                  </div>
+                </div>
+                <input
+                  className="input"
+                  value={mobileFocus}
+                  onChange={(event) => setMobileFocus(event.target.value)}
+                  placeholder="iPhone 16 Pro, Pixel 9, S24 Ultra..."
+                  disabled={loading}
+                  style={{ flex: 1, minWidth: 240, fontSize: 12 }}
+                />
+                {mobileFocus && (
+                  <button className="btn btn-secondary" onClick={() => setMobileFocus("")} disabled={loading} style={{ fontSize: 11 }}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {mode === "trending" && (
             <div className="fade-in">
               <div className="card" style={{ padding: 24, marginBottom: 16 }}>
@@ -299,6 +358,32 @@ export default function Home() {
           )}
 
           {/* ── HISTORY MODE ──────────────────────────────────────────────────── */}
+          {mode === "benchmark" && (
+            <div className="fade-in">
+              <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 14 }}>
+                  Compare your channel against competitors
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                  {benchmarkChannels.map((value, i) => (
+                    <input
+                      key={i}
+                      className="input"
+                      placeholder={i === 0 ? "Your channel URL, handle, or channel ID" : `Competitor ${i} URL, handle, or channel ID`}
+                      value={value}
+                      onChange={e => setBenchmarkChannels(prev => prev.map((v, idx) => idx === i ? e.target.value : v))}
+                      disabled={loading}
+                      style={{ fontSize: 12 }}
+                    />
+                  ))}
+                </div>
+                <button className="btn btn-primary" onClick={handleBenchmark} disabled={loading || benchmarkChannels.filter(c => c.trim()).length < 2} style={{ width: "100%", fontSize: 14, padding: "14px", justifyContent: "center" }}>
+                  {loading ? "Benchmarking channels..." : "Run Channel Benchmark"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {mode === "history" && (
             <div className="fade-in">
               {history.length === 0 ? (
@@ -515,3 +600,4 @@ export default function Home() {
     </>
   );
 }
+

@@ -4,13 +4,25 @@ import Head from "next/head";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
+  LineChart, Line, CartesianGrid,
 } from "recharts";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
 import TopicCard from "../components/TopicCard";
+import MobilePanel from "../components/MobilePanel";
 
 const SENT_COLORS = { positive: "#10b981", negative: "#ef4444", neutral: "#6b7a99" };
 const CHART_COLORS = ["#00d4ff","#f59e0b","#10b981","#ff4d6d","#7c3aed","#a78bfa","#ec4899","#06b6d4","#84cc16","#f97316"];
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatSubscriberCount(channel = {}) {
+  return channel.hiddenSubscriberCount || channel.subscriberCount == null
+    ? "Subscribers hidden"
+    : `${formatCount(channel.subscriberCount)} subscribers`;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function SentBadge({ s }) {
@@ -391,6 +403,94 @@ function SentimentDonut({ comments, sentimentStats }) {
   );
 }
 
+function SentimentTimeline({ data = [] }) {
+  if (!data.length) {
+    return <div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No dated comments available for a sentiment timeline.</div>;
+  }
+
+  return (
+    <div className="card" style={{padding:"16px 18px",marginBottom:14}}>
+      <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"var(--font-display)",fontWeight:700,marginBottom:6}}>
+        Sentiment Timeline
+      </div>
+      <div style={{fontSize:12,color:"var(--text-muted)",marginBottom:14}}>Comment sentiment over publish date</div>
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={data} margin={{ top: 8, right: 16, left: -20, bottom: 8 }}>
+          <CartesianGrid stroke="#334155" strokeDasharray="3 3" opacity={0.35}/>
+          <XAxis dataKey="date" tick={{fontSize:10,fill:"#94a3b8"}}/>
+          <YAxis tick={{fontSize:10,fill:"#94a3b8"}}/>
+          <Tooltip contentStyle={{background:"#111827",border:"1px solid #334155",borderRadius:10,fontSize:11,color:"#f8fafc"}}/>
+          <Line type="monotone" dataKey="positiveRate" name="Positive %" stroke="#10b981" strokeWidth={2} dot={false}/>
+          <Line type="monotone" dataKey="negativeRate" name="Negative %" stroke="#ef4444" strokeWidth={2} dot={false}/>
+          <Line type="monotone" dataKey="avgScore" name="Avg score" stroke="#00d4ff" strokeWidth={2} dot={false}/>
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AudienceQA({ comments = [] }) {
+  const [question, setQuestion] = useState("What do my viewers think about my editing?");
+  const [answer, setAnswer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function ask() {
+    if (!question.trim()) return;
+    setLoading(true); setError(""); setAnswer(null);
+    try {
+      const res = await fetch("/api/audience-qa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, comments }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Q&A failed");
+      setAnswer(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="card" style={{padding:"16px 18px",marginBottom:14}}>
+        <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:"0.12em",textTransform:"uppercase",fontFamily:"var(--font-display)",fontWeight:700,marginBottom:8}}>Ask your audience</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input className="input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a question grounded in comments..." style={{flex:1,fontSize:12}}/>
+          <button className="btn btn-primary" onClick={ask} disabled={loading || !comments.length} style={{fontSize:12}}>{loading ? "Asking..." : "Ask"}</button>
+        </div>
+        <div style={{fontSize:11,color:"var(--text-dim)",marginTop:8}}>Uses {comments.length} analysed comments. LLM-backed when API keys are configured; otherwise local grounded retrieval.</div>
+      </div>
+      {error && <div className="card" style={{padding:14,color:"var(--red)",borderLeft:"3px solid var(--red)"}}>{error}</div>}
+      {answer && (
+        <div className="card" style={{padding:"16px 18px",borderLeft:"3px solid var(--accent)"}}>
+          <div style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:15,marginBottom:8}}>Answer</div>
+          <div style={{fontSize:13,lineHeight:1.7,marginBottom:10}}>{answer.answer}</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:11,color:"var(--text-muted)",marginBottom:12}}>
+            <span className="tag">Engine: {answer.engine}</span>
+            <span className="tag">Confidence: {answer.confidence || "medium"}</span>
+            {(answer.themes||[]).slice(0,5).map(theme => <span key={theme} className="tag tag-accent">{theme}</span>)}
+          </div>
+          {answer.suggestedAction && <div style={{fontSize:12,color:"var(--green)",marginBottom:12}}>Suggested action: {answer.suggestedAction}</div>}
+          {(answer.evidence||[]).length > 0 && (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {answer.evidence.map((comment, index) => (
+                <div key={comment.commentId || index} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:4}}>@{comment.author} · {comment.sentiment} · likes {comment.likeCount}</div>
+                  <div style={{fontSize:12,lineHeight:1.5}}>{comment.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comments", sentimentStats = null }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -490,7 +590,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
   const [activeTab, setActiveTab] = useState("Topics");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const { channels, videos, aggregate, allDemandComments, skippedChannels } = data;
-  const TABS = ["Topics","Comments","Videos","Channels"];
+  const TABS = ["Topics","Videos","Channels","Mobile","Benchmark","Comments"];
   const rankedTopics = (videos || [])
     .filter(v => !v.error)
     .flatMap(v => (v.topics || []).map(topic => ({
@@ -501,7 +601,6 @@ function ChannelsDashboard({ data, onExport, exporting }) {
     .sort((a, b) => (b.weightedScore || 0) - (a.weightedScore || 0));
 
   const sentStats = aggregate?.sentimentStats||{};
-  const engineSummary = aggregateAnalysisEngine((videos || []).map((video) => video.analysisEngine));
   const posRate = Math.round(((sentStats.positive||0)/Math.max(1,sentStats.total))*100);
   const negRate = Math.round(((sentStats.negative||0)/Math.max(1,sentStats.total))*100);
   const sentPie = [
@@ -518,7 +617,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
             📡 Channel Analysis — Last {aggregate?.daysBack||7} Days
           </h2>
           <div style={{fontSize:12,color:"var(--text-muted)"}}>
-            {channels?.length} channels · {aggregate?.totalVideos} videos · {(aggregate?.totalComments||0).toLocaleString()} comments · <span style={{color:"var(--green)",fontWeight:700}}>{aggregate?.totalDemand||0} demand signals</span>
+            {channels?.length} channels · {aggregate?.totalVideos} recent videos · {formatCount(aggregate?.totalPublicComments ?? aggregate?.totalComments)} public comments · {formatCount(aggregate?.totalAnalyzedComments ?? aggregate?.totalComments)} analysed comments · <span style={{color:"var(--green)",fontWeight:700}}>{aggregate?.totalDemand||0} demand signals</span>
           </div>
         </div>
         <button className="btn btn-secondary" onClick={()=>router.push("/")} style={{fontSize:11}}>← Home</button>
@@ -534,9 +633,12 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       </div>
 
       {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:20}}>
-        <StatCard label="Videos" value={aggregate?.totalVideos||0} icon="🎬" color="var(--accent)"/>
-        <StatCard label="Comments" value={(aggregate?.totalComments||0).toLocaleString()} icon="💬" color="var(--text)"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:20}}>
+        <StatCard label="Recent Videos" value={aggregate?.totalVideos||0} icon="🎬" color="var(--accent)"/>
+        <StatCard label="Public Comments" value={formatCount(aggregate?.totalPublicComments ?? aggregate?.totalComments)} icon="💬" color="var(--text)"/>
+        <StatCard label="Analysed Comments" value={formatCount(aggregate?.totalAnalyzedComments ?? aggregate?.totalComments)} icon="🔍" color="#06b6d4"/>
+        <StatCard label="Views" value={formatCount(aggregate?.totalViews)} icon="👁" color="#a78bfa"/>
+        <StatCard label="Likes" value={formatCount(aggregate?.totalLikes)} icon="👍" color="#f59e0b"/>
         <StatCard label="Demand" value={aggregate?.totalDemand||0} icon="🎯" color="var(--green)"/>
         <StatCard label="😊 Positive" value={`${posRate}%`} icon="😊" color="#10b981"/>
         <StatCard label="😤 Negative" value={`${negRate}%`} icon="😤" color="#ef4444"/>
@@ -544,8 +646,6 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       </div>
 
       {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
-      <AnalysisEngineCard engine={engineSummary} title="ML Integration Across Channel Runs" />
-
       {(skippedChannels || []).length > 0 && (
         <div className="card" style={{marginBottom:20,borderLeft:"3px solid #f59e0b",padding:"12px 14px"}}>
           <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:13,marginBottom:6,color:"#f59e0b"}}>
@@ -617,7 +717,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
                 {v.thumbnail&&<img src={v.thumbnail} alt="" style={{width:64,height:36,objectFit:"cover",borderRadius:4,flexShrink:0}}/>}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontFamily:"var(--font-display)",fontSize:12,fontWeight:700,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{v.title}</div>
-                  <div style={{fontSize:11,color:"var(--text-muted)"}}>{v.channel} · 🎯 {v.stats?.demand} demand · 💬 {v.stats?.total} comments</div>
+                  <div style={{fontSize:11,color:"var(--text-muted)"}}>{v.channel} · 🎯 {v.stats?.demand} demand · 💬 {formatCount(v.stats?.publicCommentCount ?? v.metadata?.commentCount)} public · {formatCount(v.stats?.analyzedComments ?? v.stats?.total)} analysed</div>
                 </div>
                 <div style={{fontSize:18,fontWeight:800,fontFamily:"var(--font-display)",color:"var(--accent)"}}>#{i+1}</div>
               </div>
@@ -640,6 +740,46 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       )}
 
       {/* ── DEMAND COMMENTS ───────────────────────────────────────────────── */}
+      {activeTab==="Benchmark" && (
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12,marginBottom:16}}>
+            {(data.channelBenchmarks||[]).map((channel, index) => (
+              <div key={channel.channel} className="card" style={{padding:"14px 16px",borderTop:`3px solid ${CHART_COLORS[index % CHART_COLORS.length]}`}}>
+                <div style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:14,marginBottom:8}}>{channel.channel}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                  {[["Videos",channel.videos],["Views",formatCount(channel.views)],["Public Comments",formatCount(channel.publicComments)],["Analysed",formatCount(channel.comments)],["Demand %",`${channel.demandRate}%`],["Positive %",`${channel.positiveRate}%`]].map(([label,value])=>(
+                    <div key={label} style={{background:"var(--bg3)",borderRadius:6,padding:"7px 8px",textAlign:"center"}}>
+                      <div style={{fontFamily:"var(--font-display)",fontWeight:800,color:"var(--accent)"}}>{value}</div>
+                      <div style={{fontSize:10,color:"var(--text-muted)"}}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {(channel.topTopics||[]).map(topic => <span key={topic.label} className="tag">{topic.label} ({topic.count})</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="card" style={{padding:"16px 18px"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"var(--font-display)",fontWeight:700,marginBottom:10}}>Channel Demand Rate</div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data.channelBenchmarks||[]} margin={{ top: 8, right: 8, left: -18, bottom: 22 }}>
+                <XAxis dataKey="channel" tick={{fontSize:10,fill:"#94a3b8"}} interval={0} angle={-8} textAnchor="end" height={52}/>
+                <YAxis tick={{fontSize:10,fill:"#94a3b8"}}/>
+                <Tooltip contentStyle={{background:"#111827",border:"1px solid #334155",borderRadius:10,fontSize:11,color:"#f8fafc"}}/>
+                <Bar dataKey="demandRate" radius={[6,6,0,0]}>
+                  {(data.channelBenchmarks||[]).map((_,i)=><Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {activeTab==="Mobile" && (
+        <MobilePanel phoneMentions={data.phoneMentions || []} title={data.mobileFocus?.query ? `Mobile Mentions Across Channels - ${data.mobileFocus.query}` : "Mobile Mentions Across Channels"} />
+      )}
+
       {activeTab==="Comments" && (
         <DemandPanel comments={allDemandComments||[]} showVideo={true} sentimentStats={sentStats} title="🎯 Top Comments With Weight" />
       )}
@@ -648,7 +788,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       {activeTab==="Videos" && (
         <div>
           <div style={{fontSize:13,color:"var(--text-muted)",marginBottom:14}}>
-            {(videos||[]).filter(v=>!v.error).length} videos analysed
+            {(videos||[]).filter(v=>!v.error).length} recent videos analysed. Public views, likes, and comment counts come from YouTube video statistics; analysed comments are fetched top-level comments used for NLP.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {(videos||[]).map((v,i)=>{
@@ -667,7 +807,10 @@ function ChannelsDashboard({ data, onExport, exporting }) {
                       <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:13,marginBottom:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{v.metadata?.title||v.title}</div>
                       <div style={{fontSize:11,color:"var(--text-muted)",marginBottom:6}}>{v.channelName}</div>
                       <div style={{display:"flex",gap:10,fontSize:11}}>
-                        <span style={{color:"var(--accent)"}}>💬 {v.stats?.total}</span>
+                        <span style={{color:"var(--accent)"}}>👁 {formatCount(v.stats?.viewCount || v.metadata?.viewCount)}</span>
+                        <span style={{color:"#f59e0b"}}>👍 {formatCount(v.stats?.likeCount || v.metadata?.likeCount)}</span>
+                        <span style={{color:"#06b6d4"}}>💬 {formatCount(v.stats?.publicCommentCount ?? v.metadata?.commentCount)} public</span>
+                        <span style={{color:"var(--accent)"}}>Analysed {formatCount(v.stats?.analyzedComments ?? v.stats?.total)}</span>
                         <span style={{color:"var(--green)"}}>🎯 {v.stats?.demand}</span>
                         <span style={{color:"#10b981"}}>😊 {posR}%</span>
                         <span style={{color:"#f59e0b"}}>🔥 {v.viralityScore?.score||0}</span>
@@ -712,7 +855,10 @@ function ChannelsDashboard({ data, onExport, exporting }) {
           {(channels||[]).map((ch,i)=>{
             const chVids=(videos||[]).filter(v=>!v.error&&v.channelName===ch.name);
             const totalDemand=chVids.reduce((s,v)=>s+(v.stats?.demand||0),0);
-            const totalComments=chVids.reduce((s,v)=>s+(v.stats?.total||0),0);
+            const totalComments=chVids.reduce((s,v)=>s+(v.stats?.analyzedComments ?? v.stats?.total ?? 0),0);
+            const publicComments=chVids.reduce((s,v)=>s+(v.stats?.publicCommentCount||v.metadata?.commentCount||0),0);
+            const totalViews=chVids.reduce((s,v)=>s+(v.stats?.viewCount||v.metadata?.viewCount||0),0);
+            const totalLikes=chVids.reduce((s,v)=>s+(v.stats?.likeCount||v.metadata?.likeCount||0),0);
             const avgVirality=chVids.length?Math.round(chVids.reduce((s,v)=>s+(v.viralityScore?.score||0),0)/chVids.length):0;
             const color=CHART_COLORS[i];
             return(
@@ -721,11 +867,12 @@ function ChannelsDashboard({ data, onExport, exporting }) {
                   {ch.thumbnail&&<img src={ch.thumbnail} alt="" style={{width:40,height:40,borderRadius:"50%",flexShrink:0}}/>}
                   <div>
                     <div style={{fontFamily:"var(--font-display)",fontWeight:700,fontSize:14,color}}>{ch.name}</div>
-                    <div style={{fontSize:11,color:"var(--text-muted)"}}>{(ch.subscriberCount||0).toLocaleString()} subscribers</div>
+                    <div style={{fontSize:11,color:"var(--text-muted)"}}>{formatSubscriberCount(ch)}</div>
+                    <div style={{fontSize:10,color:"var(--text-dim)"}}>{formatCount(ch.viewCount)} channel views · {formatCount(ch.videoCount)} videos</div>
                   </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  {[["Videos",chVids.length,color],["Comments",totalComments,"#00d4ff"],["Demand",totalDemand,"#10b981"],["Avg Viral",avgVirality,"#f59e0b"]].map(([label,val,c])=>(
+                  {[["Recent Videos",chVids.length,color],["Views",formatCount(totalViews),"#a78bfa"],["Likes",formatCount(totalLikes),"#f59e0b"],["Public Comments",formatCount(publicComments),"#00d4ff"],["Analysed",formatCount(totalComments),"#06b6d4"],["Demand",totalDemand,"#10b981"],["Avg Viral",avgVirality,"#f59e0b"]].map(([label,val,c])=>(
                     <div key={label} style={{background:"var(--bg3)",borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
                       <div style={{fontSize:18,fontWeight:800,fontFamily:"var(--font-display)",color:c}}>{val}</div>
                       <div style={{fontSize:10,color:"var(--text-muted)"}}>{label}</div>
@@ -747,7 +894,7 @@ function CompareDashboard({ data, onExport, exporting }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const videos = (data.videos || []).filter(v => !v.error);
   const allDemandComments = data.allDemandComments || [];
-  const TABS = ["Overview", "Comments", "Videos", "Raw"];
+  const TABS = ["Overview", "Mobile", "Comments", "Videos", "Raw"];
   const rankedTopics = videos
     .flatMap(v => (v.topics || []).map(topic => ({
       ...topic,
@@ -796,7 +943,7 @@ function CompareDashboard({ data, onExport, exporting }) {
         ))}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:20}}>
         <StatCard label="Videos" value={aggregate.totalVideos} icon="🎬" color="var(--accent)"/>
         <StatCard label="Comments" value={aggregate.totalComments.toLocaleString()} icon="💬" color="var(--text)"/>
         <StatCard label="Demand" value={aggregate.totalDemand} icon="🎯" color="var(--green)"/>
@@ -804,8 +951,6 @@ function CompareDashboard({ data, onExport, exporting }) {
         <StatCard label="Negative" value={`${negativeRate}%`} icon="😤" color="#ef4444"/>
         <StatCard label="Topics" value={videos.reduce((sum, v) => sum + (v.topics?.length || 0), 0)} icon="📋" color="var(--accent3)"/>
       </div>
-
-      <AnalysisEngineCard engine={engineSummary} title="ML Integration Across Compared Videos" />
 
       {activeTab==="Overview" && (
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -842,6 +987,10 @@ function CompareDashboard({ data, onExport, exporting }) {
 
       {activeTab==="Comments" && (
         <DemandPanel comments={allDemandComments} showVideo={true} sentimentStats={aggregate} title={`Top Comments With Weight — ${allDemandComments.length} found`}/>
+      )}
+
+      {activeTab==="Mobile" && (
+        <MobilePanel phoneMentions={data.phoneMentions || []} title={data.mobileFocus?.query ? `Mobile Mentions Across Compared Videos - ${data.mobileFocus.query}` : "Mobile Mentions Across Compared Videos"} />
       )}
 
       {activeTab==="Videos" && (
@@ -885,9 +1034,9 @@ function SingleVideoDetails({ data, onExport, exporting }) {
   const router = useRouter();
   const [tab, setTab] = useState("Topics");
   const [sentFilter, setSentFilter] = useState("all");
-  const TABS = ["Topics","Keywords","Comments","Raw"];
+  const TABS = ["Overview","Mobile","Topics","Keywords","Comments","Intents","Suggestions","Raw"];
 
-  const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, intentSummary, suggestions, viralityScore, actionableSteps, analysisEngine } = data;
+  const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, sentimentTimeline, intentSummary, suggestions, viralityScore, actionableSteps, analysisEngine } = data;
 
   const sentPieData=[
     {name:"Positive",value:sentimentStats?.positive||0,color:"#10b981"},
@@ -929,8 +1078,9 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       </div>
 
       {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:20}}>
-        <StatCard label="Total" value={(stats?.total||0).toLocaleString()} icon="💬" color="var(--text)"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12,marginBottom:20}}>
+        <StatCard label="Public Comments" value={formatCount(stats?.publicCommentCount ?? stats?.total)} icon="💬" color="var(--text)"/>
+        <StatCard label="Analysed Comments" value={formatCount(stats?.analyzedComments)} sub={`${formatCount(stats?.topLevelCommentCount)} top-level · ${formatCount(stats?.replyCount)} replies`} icon="🔍" color="#06b6d4"/>
         <StatCard label="Demand" value={stats?.demand||0} sub={`${stats?.demandPercent||0}%`} icon="🎯" color="var(--green)"/>
         <StatCard label="😊 Positive" value={`${Math.round(((sentimentStats?.positive||0)/Math.max(1,sentimentStats?.total))*100)}%`} icon="😊" color="#10b981"/>
         <StatCard label="😤 Negative" value={`${Math.round(((sentimentStats?.negative||0)/Math.max(1,sentimentStats?.total))*100)}%`} icon="😤" color="#ef4444"/>
@@ -939,8 +1089,6 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       </div>
 
       {/* ── OVERVIEW ───────────────────────────────────────────────────── */}
-      <AnalysisEngineCard engine={analysisEngine} title="ML Integration For This Analysis" />
-
       {tab==="Overview"&&(
         <div>
           <div style={{marginBottom:14}}><ViralityMeter score={viralityScore?.score||0} label={viralityScore?.label||""} reasoning={viralityScore?.reasoning||""}/></div>
@@ -990,6 +1138,10 @@ function SingleVideoDetails({ data, onExport, exporting }) {
         <DemandPanel comments={demandComments||[]} showVideo={false} sentimentStats={sentimentStats} title={`🎯 Top Comments With Weight — ${(demandComments||[]).length} found`}/>
       )}
 
+      {tab==="Mobile"&&(
+        <MobilePanel phoneMentions={data.phoneMentions || []} title={data.mobileFocus?.query ? `Mobile Mentions In This Video - ${data.mobileFocus.query}` : "Mobile Mentions In This Video"} />
+      )}
+
       {/* ── TOPICS ─────────────────────────────────────────────────────── */}
       {tab==="Topics"&&(
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -1010,6 +1162,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       {/* ── SENTIMENT ──────────────────────────────────────────────────── */}
       {tab==="Sentiment"&&(
         <div>
+          <SentimentTimeline data={sentimentTimeline||[]} />
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
             <div className="card">
               <PieChart width={260} height={200} style={{margin:"0 auto"}}>
@@ -1209,3 +1362,4 @@ export default function Dashboard() {
     </>
   );
 }
+
