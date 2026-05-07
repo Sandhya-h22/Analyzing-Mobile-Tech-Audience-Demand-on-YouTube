@@ -92,32 +92,17 @@ function scorePhoneComment(comment = {}, phone = {}) {
   return modelHits + brandHit;
 }
 
-function mobileFallbackComments(phone = {}, rows = []) {
-  const model = phone.modelName || "this phone";
-  const topDemand = rows[0]?.label && rows[0].label !== "Audience request" ? rows[0].label.toLowerCase() : "camera and battery";
-
-  return [
-    { text: `Can you compare ${model} camera, battery, and heating in daily use?`, primaryIntent: "question", isDemand: true, demandScore: 1, subtopic: "smartphone_comparison" },
-    { text: `Is ${model} worth buying now or should I wait for the next launch?`, primaryIntent: "purchase_intent", isDemand: true, demandScore: 1, subtopic: "smartphone_pricing" },
-    { text: `Please make a detailed ${model} review focused on ${topDemand}.`, primaryIntent: "content_request", isDemand: true, demandScore: 1 },
-  ];
-}
-
-function mobileExamples(phone = {}, rows = []) {
+function mobileExamples(phone = {}) {
   const seen = new Set();
-  const focused = (phone.exampleComments || [])
-    .map((comment) => ({ ...comment, phoneScore: scorePhoneComment(comment, phone) }))
-    .filter((comment) => comment.phoneScore > 0 && (comment.text || comment.original))
-    .sort((a, b) => (b.phoneScore - a.phoneScore) || ((b.likeCount || 0) - (a.likeCount || 0)))
+  return (phone.exampleComments || [])
+    .filter((comment) => (comment.text || comment.original))
+    .sort((a, b) => ((b.likeCount || 0) + (b.replyCount || 0)) - ((a.likeCount || 0) + (a.replyCount || 0)))
     .filter((comment) => {
       const key = normalizeText(comment.text || comment.original);
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
-    })
-    .map(({ phoneScore, ...comment }) => comment);
-
-  return [...focused, ...mobileFallbackComments(phone, rows)].slice(0, 3);
+    });
 }
 
 export default function MobilePanel({ phoneMentions = [], title = "Mobile Mentions" }) {
@@ -151,7 +136,7 @@ export default function MobilePanel({ phoneMentions = [], title = "Mobile Mentio
   }
 
   const rows = demandRows(activePhone);
-  const examples = mobileExamples(activePhone, rows);
+  const examples = mobileExamples(activePhone);
 
   return (
     <div className="card" style={{padding:0,overflow:"hidden"}}>
@@ -242,7 +227,12 @@ export default function MobilePanel({ phoneMentions = [], title = "Mobile Mentio
             Mobile comments
           </div>
           {examples.length > 0 ? (
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{fontSize:12,color:"var(--text-muted)",marginBottom:10}}>
+              Showing all matched comments: {examples.length}
+            </div>
+          ) : null}
+          {examples.length > 0 ? (
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:760,overflowY:"auto",paddingRight:2}}>
               {examples.map((comment, index) => {
                 const topic = demandedTopic(comment, rows);
                 const [sentColor, sentLabel] = sentimentChip(comment);

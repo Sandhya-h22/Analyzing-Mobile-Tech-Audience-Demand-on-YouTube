@@ -7,7 +7,6 @@ export default function Navbar({ hideHistoryAndChannels }) {
   const links = [
     { href: "/", label: "Analyse" },
     { href: "/dashboard", label: "Dashboard" },
-    { href: "/annotate", label: "Annotate" },
   ];
 
   return (

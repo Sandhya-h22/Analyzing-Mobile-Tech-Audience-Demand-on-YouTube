@@ -5,9 +5,14 @@ import { analyseTopicsWithML } from "../../lib/tfidf.js";
 import { processAllSentimentsWithML, extractContentSuggestions, computeViralityScore, generateActionableSteps, buildSentimentTimeline, buildPhoneMentions } from "../../lib/sentiment.js";
 import { getDomainOptions, getDomainConfig } from "../../lib/domainConfig.js";
 
-const DEFAULT_MAX_COMMENTS = Number(process.env.ANALYSIS_MAX_COMMENTS || 300);
-const CHANNEL_MAX_COMMENTS = Number(process.env.CHANNEL_ANALYSIS_MAX_COMMENTS || 120);
+const DEFAULT_MAX_COMMENTS = normalizeConfiguredLimit(process.env.ANALYSIS_MAX_COMMENTS);
+const CHANNEL_MAX_COMMENTS = normalizeConfiguredLimit(process.env.CHANNEL_ANALYSIS_MAX_COMMENTS);
 const CHANNEL_MAX_VIDEOS = Number(process.env.CHANNEL_ANALYSIS_MAX_VIDEOS || 5);
+
+function normalizeConfiguredLimit(value) {
+  const limit = Number(value);
+  return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : Infinity;
+}
 
 function normalizeLimit(value, fallback) {
   const limit = Number(value);
@@ -162,10 +167,9 @@ function mergePhoneMentions(videos = []) {
         ...entry.sentiment,
         avgScore: parseFloat((entry.sentiment.avgScore / Math.max(1, entry.sentiment.total)).toFixed(2)),
       },
-      demands: entry.demands.slice(0, 5),
+      demands: entry.demands,
       exampleComments: entry.exampleComments
-        .sort((a, b) => ((b.likeCount || 0) + (b.replyCount || 0)) - ((a.likeCount || 0) + (a.replyCount || 0)))
-        .slice(0, 6),
+        .sort((a, b) => ((b.likeCount || 0) + (b.replyCount || 0)) - ((a.likeCount || 0) + (a.replyCount || 0))),
     }))
     .sort((a, b) => b.mentionCount - a.mentionCount);
 }
@@ -256,8 +260,8 @@ export async function analyseSingleVideo(url, apiKey, maxComments = DEFAULT_MAX_
     stats,
     topics: topicsClean,
     topKeywords,
-    demandComments: sortedDemand.slice(0, 200).map(sanitize),
-    allComments: withSentiment.slice(0, 300).map(sanitize),
+    demandComments: sortedDemand.map(sanitize),
+    allComments: withSentiment.map(sanitize),
     sentimentStats,
     intentSummary,
     analysisEngine,
@@ -308,10 +312,19 @@ export default async function handler(req, res) {
           videoTitle: video.metadata?.title,
           videoChannel: video.metadata?.channel,
         })))
-        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10))
-        .slice(0, 100);
+        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10));
 
-      return res.status(200).json({ success: true, mode: "compare", videos, allDemandComments, phoneMentions: filterPhoneMentions(mergePhoneMentions(videos), mobileFocus), mobileFocus: focus });
+      const allComments = videos
+        .filter((video) => !video.error)
+        .flatMap((video) => (video.allComments || []).map((comment) => ({
+          ...comment,
+          videoTitle: video.metadata?.title,
+          videoChannel: video.metadata?.channel,
+          videoThumbnail: video.metadata?.thumbnail,
+        })))
+        .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+
+      return res.status(200).json({ success: true, mode: "compare", videos, allDemandComments, allComments, phoneMentions: filterPhoneMentions(mergePhoneMentions(videos), mobileFocus), mobileFocus: focus });
     }
 
     if (mode === "channels") {
@@ -362,6 +375,7 @@ export default async function handler(req, res) {
           channels: resolvedChannels,
           videos: [],
           allDemandComments: [],
+          allComments: [],
           phoneMentions: [],
           mobileFocus: focus,
           aggregate: { totalVideos: 0, totalComments: 0, totalAnalyzedComments: 0, totalPublicComments: 0, totalViews: 0, totalLikes: 0, totalDemand: 0, daysBack },
@@ -442,8 +456,8 @@ export default async function handler(req, res) {
             suggestions,
             sentimentTimeline: buildSentimentTimeline(withSent),
             phoneMentions: filterPhoneMentions(buildPhoneMentions(groupByPhone(withSent), metadata), mobileFocus),
-            allComments: withSent.slice(0, 100).map(sanitize),
-            demandComments: sortedDemand.slice(0, 80).map(sanitize),
+            allComments: withSent.map(sanitize),
+            demandComments: sortedDemand.map(sanitize),
           };
         })
       );
@@ -487,8 +501,15 @@ export default async function handler(req, res) {
           videoChannel: video.channelName,
           videoThumbnail: video.metadata?.thumbnail || video.thumbnail,
         })))
-        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10))
-        .slice(0, 150);
+        .sort((a, b) => (b.likeCount + (b.demandScore || 0) * 10) - (a.likeCount + (a.demandScore || 0) * 10));
+      const allComments = successfulVideos
+        .flatMap((video) => (video.allComments || []).map((comment) => ({
+          ...comment,
+          videoTitle: video.metadata?.title || video.title,
+          videoChannel: video.channelName,
+          videoThumbnail: video.metadata?.thumbnail || video.thumbnail,
+        })))
+        .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
       const channelBenchmarks = buildChannelBenchmarks(successfulVideos);
       const phoneMentions = filterPhoneMentions(mergePhoneMentions(successfulVideos), mobileFocus);
 
@@ -500,6 +521,7 @@ export default async function handler(req, res) {
         videos: videoResults,
         failedVideos,
         allDemandComments,
+        allComments,
         phoneMentions,
         mobileFocus: focus,
         aggregate: {
@@ -544,4 +566,4 @@ export default async function handler(req, res) {
   }
 }
 
-export const config = { api: { bodyParser: { sizeLimit: "4mb" }, responseLimit: false } };
+export const config = { api: { bodyParser: { sizeLimit: "50mb" }, responseLimit: false } };

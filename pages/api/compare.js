@@ -5,7 +5,12 @@ import { analyseTopicsWithML } from "../../lib/tfidf.js";
 import { processAllSentimentsWithML, computeViralityScore, generateActionableSteps, extractContentSuggestions, buildPhoneMentions } from "../../lib/sentiment.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const DEFAULT_MAX_COMMENTS = Number(process.env.ANALYSIS_MAX_COMMENTS || 300);
+const DEFAULT_MAX_COMMENTS = normalizeConfiguredLimit(process.env.ANALYSIS_MAX_COMMENTS);
+
+function normalizeConfiguredLimit(value) {
+  const limit = Number(value);
+  return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : Infinity;
+}
 
 function normalizeLimit(value, fallback) {
   const limit = Number(value);
@@ -144,6 +149,10 @@ async function analyseOneVideo(videoId, apiKey, maxComments, mobileFocus = "", i
       })),
       topViralComments,
     },
+    allComments: sentimentResult.comments,
+    demandComments: sentimentResult.comments
+      .filter((comment) => comment.isDemand)
+      .sort((a, b) => ((b.likeCount || 0) + (b.demandScore || 0) * 10) - ((a.likeCount || 0) + (a.demandScore || 0) * 10)),
   };
 }
 
@@ -191,7 +200,7 @@ export default async function handler(req, res) {
   }
 }
 
-export const config = { api: { bodyParser: { sizeLimit: "2mb" } } };
+export const config = { api: { bodyParser: { sizeLimit: "50mb" }, responseLimit: false } };
 
 function mergePhoneMentions(videos = []) {
   const merged = new Map();

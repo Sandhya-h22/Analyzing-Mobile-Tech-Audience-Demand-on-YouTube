@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import Navbar from "../components/Navbar";
+import { buildHistorySummary, loadHistoryAnalysis, saveHistoryAnalysis, saveLatestAnalysis } from "../lib/analysisStorage";
 
 const PIPELINE_STAGES = [
   { id: 1, label: "Data Collection",     desc: "YouTube API v3",                          icon: "📡", color: "#00d4ff" },
@@ -95,17 +96,14 @@ export default function Home() {
       const data = await readApiJson(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
-      // Save to history
-      saveHistory({
+      await saveAnalysisAndHistory(data, {
         type: "channels",
         label: `Top 5 Mobile Channels${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
         channels: TOP_CHANNELS.map(c => c.name),
         totalVideos: data.aggregate?.totalVideos || 0,
         totalComments: data.aggregate?.totalComments || 0,
-        data,
       });
 
-      sessionStorage.setItem("yt_analysis", JSON.stringify(data));
       router.push("/dashboard");
     } catch (err) { setError(err.message); setLoading(false); }
   }
@@ -124,7 +122,7 @@ export default function Home() {
       const data = await readApiJson(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
-      saveHistory({
+      await saveAnalysisAndHistory(data, {
         type: "compare",
         label: urls.length === 1
           ? `Analysed 1 video${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""}`
@@ -141,10 +139,8 @@ export default function Home() {
           viralityScore: v.viralityScore,
           demandComments: (v.demandComments || []).slice(0, 5),
         })),
-        data,
       });
 
-      sessionStorage.setItem("yt_analysis", JSON.stringify(data));
       router.push("/dashboard");
     } catch (err) { setError(err.message); setLoading(false); }
   }
@@ -164,30 +160,47 @@ export default function Home() {
       const data = await readApiJson(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Benchmark failed");
 
-      saveHistory({
+      await saveAnalysisAndHistory(data, {
         type: "channels",
         label: `Channel benchmark${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
         channels: inputs.map(c => c.input),
         totalVideos: data.aggregate?.totalVideos || 0,
         totalComments: data.aggregate?.totalComments || 0,
-        data,
       });
 
-      sessionStorage.setItem("yt_analysis", JSON.stringify(data));
       router.push("/dashboard");
     } catch (err) { setError(err.message); setLoading(false); }
+  }
+
+  async function saveAnalysisAndHistory(data, summary) {
+    await saveLatestAnalysis(data);
+    const id = Date.now();
+    const stored = await saveHistoryAnalysis(id, data);
+    saveHistory({
+      id,
+      analysisId: stored ? id : null,
+      ...buildHistorySummary(data, summary),
+      topVideos: summary.topVideos || [],
+      data: stored ? undefined : data,
+    });
   }
 
   function saveHistory(entry) {
     try {
       const h = JSON.parse(localStorage.getItem("yt_history") || "[]");
-      h.unshift({ id: Date.now(), createdAt: new Date().toISOString(), ...entry });
+      h.unshift({ createdAt: new Date().toISOString(), ...entry });
       localStorage.setItem("yt_history", JSON.stringify(h.slice(0, 20)));
+      setHistory(h.slice(0, 20));
     } catch {}
   }
 
-  function loadEntry(entry) {
-    sessionStorage.setItem("yt_analysis", JSON.stringify(entry.data));
+  async function loadEntry(entry) {
+    const data = await loadHistoryAnalysis(entry);
+    if (!data) {
+      setError("This history entry no longer has its full analysis data.");
+      return;
+    }
+    await saveLatestAnalysis(data);
     router.push("/dashboard");
   }
 

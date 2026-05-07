@@ -10,12 +10,19 @@ import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
 import TopicCard from "../components/TopicCard";
 import MobilePanel from "../components/MobilePanel";
+import { buildHistorySummary, loadLatestAnalysis, saveHistoryAnalysis } from "../lib/analysisStorage";
 
 const SENT_COLORS = { positive: "#10b981", negative: "#ef4444", neutral: "#6b7a99" };
 const CHART_COLORS = ["#00d4ff","#f59e0b","#10b981","#ff4d6d","#7c3aed","#a78bfa","#ec4899","#06b6d4","#84cc16","#f97316"];
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString();
+}
+
+function getVideoLink(video = {}) {
+  if (video.url) return video.url;
+  const id = video.metadata?.videoId || video.videoId || "";
+  return id ? `https://www.youtube.com/watch?v=${id}` : "";
 }
 
 function formatSubscriberCount(channel = {}) {
@@ -584,13 +591,113 @@ function DemandPanel({ comments, showVideo = false, title = "🎯 Demand Comment
   );
 }
 
+function AllCommentsPanel({ comments = [], title = "All Analysed Comments", showVideo = false, onExport = null, exporting = false }) {
+  const [search, setSearch] = useState("");
+  const [sentiment, setSentiment] = useState("all");
+  const [sort, setSort] = useState("date");
+  const [page, setPage] = useState(0);
+  const PER_PAGE = 30;
+
+  let filtered = comments.filter((comment) => {
+    if (sentiment !== "all" && comment.sentiment !== sentiment) return false;
+    if (!search.trim()) return true;
+    const query = search.toLowerCase();
+    return [comment.text, comment.author, comment.videoTitle, comment.videoChannel, comment.primaryIntent, comment.subtopic]
+      .some((value) => String(value || "").toLowerCase().includes(query));
+  });
+
+  if (sort === "date") filtered = [...filtered].sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+  if (sort === "likes") filtered = [...filtered].sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
+  if (sort === "demand") filtered = [...filtered].sort((a, b) => (Number(b.isDemand) - Number(a.isDemand)) || ((b.demandScore || 0) - (a.demandScore || 0)));
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paged = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        <div>
+          <div style={{fontFamily:"var(--font-display)",fontWeight:800,fontSize:16}}>{title}</div>
+          <div style={{fontSize:12,color:"var(--text-muted)"}}>{filtered.length} of {comments.length} comments shown</div>
+        </div>
+        {onExport && (
+          <button className="btn btn-secondary" disabled={exporting || !comments.length} onClick={()=>onExport("all-comments", comments)} style={{fontSize:11}}>
+            Export All Comments CSV
+          </button>
+        )}
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <input className="input" placeholder="Search comments, authors, videos, intents..." value={search} onChange={(event)=>{setSearch(event.target.value);setPage(0);}} style={{flex:1,minWidth:220,fontSize:12}}/>
+        <select value={sentiment} onChange={(event)=>{setSentiment(event.target.value);setPage(0);}} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"var(--radius)",color:"var(--text)",fontFamily:"var(--font-mono)",fontSize:12,padding:"8px 12px"}}>
+          <option value="all">All sentiment</option>
+          <option value="positive">Positive</option>
+          <option value="negative">Negative</option>
+          <option value="neutral">Neutral</option>
+        </select>
+        <select value={sort} onChange={(event)=>setSort(event.target.value)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"var(--radius)",color:"var(--text)",fontFamily:"var(--font-mono)",fontSize:12,padding:"8px 12px"}}>
+          <option value="date">Sort: Newest</option>
+          <option value="likes">Sort: Most Liked</option>
+          <option value="demand">Sort: Demand First</option>
+        </select>
+      </div>
+
+      {!paged.length ? (
+        <div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No comments match your filters.</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Sentiment</th>
+                <th>Author</th>
+                {showVideo && <th>Video</th>}
+                <th>Comment</th>
+                <th>Intent</th>
+                <th>Demand</th>
+                <th>Likes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map((comment, index) => (
+                <tr key={comment.commentId || index}>
+                  <td><SentBadge s={comment.sentiment}/></td>
+                  <td style={{fontSize:11,color:"var(--text-muted)",whiteSpace:"nowrap"}}>@{comment.author || "unknown"}</td>
+                  {showVideo && (
+                    <td style={{fontSize:11,color:"var(--text-muted)",maxWidth:220}}>
+                      <div style={{fontWeight:800,color:"var(--accent)"}}>{comment.videoChannel || ""}</div>
+                      <div style={{overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{comment.videoTitle || ""}</div>
+                    </td>
+                  )}
+                  <td style={{maxWidth:460,fontSize:12,lineHeight:1.5}}>{comment.text}</td>
+                  <td style={{fontSize:11,color:"var(--text-muted)"}}>{comment.primaryIntent || "general"}</td>
+                  <td style={{fontSize:11,color:comment.isDemand ? "var(--green)" : "var(--text-muted)",fontWeight:800}}>{comment.isDemand ? `Yes (${comment.demandScore || 0})` : "No"}</td>
+                  <td style={{color:"var(--accent4)"}}>{formatCount(comment.likeCount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:16,alignItems:"center"}}>
+          <button className="btn btn-secondary" disabled={page===0} onClick={()=>setPage((value)=>value-1)} style={{fontSize:12}}>Prev</button>
+          <span style={{fontSize:12,color:"var(--text-muted)"}}>Page {page + 1} of {totalPages}</span>
+          <button className="btn btn-secondary" disabled={page>=totalPages-1} onClick={()=>setPage((value)=>value+1)} style={{fontSize:12}}>Next</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Channels Dashboard ─────────────────────────────────────────────────────────
 function ChannelsDashboard({ data, onExport, exporting }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Topics");
   const [selectedVideo, setSelectedVideo] = useState(null);
-  const { channels, videos, aggregate, allDemandComments, skippedChannels } = data;
-  const TABS = ["Topics","Videos","Channels","Mobile","Benchmark","Comments"];
+  const { channels, videos, aggregate, allDemandComments, allComments, skippedChannels } = data;
+  const TABS = ["Topics","Videos","Channels","Mobile","Benchmark","Comments","All Comments"];
   const rankedTopics = (videos || [])
     .filter(v => !v.error)
     .flatMap(v => (v.topics || []).map(topic => ({
@@ -627,7 +734,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       <div style={{display:"flex",gap:4,marginBottom:20,borderBottom:"1px solid var(--border)"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setActiveTab(t)} style={{padding:"10px 16px",border:"none",background:"transparent",color:activeTab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:activeTab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}{t==="Comments"&&allDemandComments?.length>0?` (${allDemandComments.length})`:""}
+            {t}{t==="Comments"&&allDemandComments?.length>0?` (${allDemandComments.length})`:t==="All Comments"&&allComments?.length>0?` (${allComments.length})`:""}
           </button>
         ))}
       </div>
@@ -674,7 +781,7 @@ function ChannelsDashboard({ data, onExport, exporting }) {
           {!rankedTopics.length ? (
             <div className="card" style={{textAlign:"center",color:"var(--text-muted)",padding:40}}>No demand topics found.</div>
           ) : (
-            rankedTopics.slice(0, 20).map((topic, index) => (
+            rankedTopics.map((topic, index) => (
               <TopicCard key={topic.topicKey} topic={topic} rank={index + 1} />
             ))
           )}
@@ -785,6 +892,10 @@ function ChannelsDashboard({ data, onExport, exporting }) {
       )}
 
       {/* ── VIDEOS ────────────────────────────────────────────────────────── */}
+      {activeTab==="All Comments" && (
+        <AllCommentsPanel comments={allComments||[]} showVideo={true} title={`All Analysed Comments - ${formatCount((allComments||[]).length)}`} onExport={onExport} exporting={exporting} />
+      )}
+
       {activeTab==="Videos" && (
         <div>
           <div style={{fontSize:13,color:"var(--text-muted)",marginBottom:14}}>
@@ -818,6 +929,19 @@ function ChannelsDashboard({ data, onExport, exporting }) {
                     </div>
                     <div style={{color:"var(--text-dim)",fontSize:12,transform:isExp?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</div>
                   </div>
+                  {getVideoLink(v) && (
+                    <div style={{padding:"0 14px 12px"}}>
+                      <a
+                        href={getVideoLink(v)}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e)=>e.stopPropagation()}
+                        style={{fontSize:12,color:"var(--accent)",fontWeight:700,textDecoration:"none"}}
+                      >
+                        Watch video on YouTube →
+                      </a>
+                    </div>
+                  )}
                   {isExp&&(
                     <div style={{borderTop:"1px solid var(--border)",padding:"12px 14px",background:"var(--bg3)"}} onClick={e=>e.stopPropagation()}>
                       {/* Topics */}
@@ -838,6 +962,11 @@ function ChannelsDashboard({ data, onExport, exporting }) {
                           <div style={{display:"flex",flexDirection:"column",gap:8}}>
                             {(v.demandComments||[]).slice(0,4).map((c,ci)=><DemandCard key={c.commentId||ci} c={c} showVideo={false}/>)}
                           </div>
+                        </div>
+                      )}
+                      {(v.allComments||[]).length>0&&(
+                        <div style={{marginTop:12}}>
+                          <AllCommentsPanel comments={v.allComments||[]} showVideo={false} title={`All comments for this video - ${formatCount((v.allComments||[]).length)}`} onExport={onExport} exporting={exporting} />
                         </div>
                       )}
                     </div>
@@ -894,7 +1023,13 @@ function CompareDashboard({ data, onExport, exporting }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const videos = (data.videos || []).filter(v => !v.error);
   const allDemandComments = data.allDemandComments || [];
-  const TABS = ["Overview", "Mobile", "Comments", "Videos", "Raw"];
+  const allComments = data.allComments || videos.flatMap((video) => (video.allComments || []).map((comment) => ({
+    ...comment,
+    videoTitle: video.metadata?.title,
+    videoChannel: video.metadata?.channel,
+    videoThumbnail: video.metadata?.thumbnail,
+  })));
+  const TABS = ["Overview", "Mobile", "Comments", "All Comments", "Videos", "Raw"];
   const rankedTopics = videos
     .flatMap(v => (v.topics || []).map(topic => ({
       ...topic,
@@ -938,7 +1073,7 @@ function CompareDashboard({ data, onExport, exporting }) {
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"1px solid var(--border)",overflowX:"auto"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setActiveTab(t)} style={{padding:"10px 14px",border:"none",background:"transparent",color:activeTab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:activeTab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}{t==="Comments" && allDemandComments.length ? ` (${allDemandComments.length})` : ""}
+            {t}{t==="Comments" && allDemandComments.length ? ` (${allDemandComments.length})` : t==="All Comments" && allComments.length ? ` (${allComments.length})` : ""}
           </button>
         ))}
       </div>
@@ -989,6 +1124,10 @@ function CompareDashboard({ data, onExport, exporting }) {
         <DemandPanel comments={allDemandComments} showVideo={true} sentimentStats={aggregate} title={`Top Comments With Weight — ${allDemandComments.length} found`}/>
       )}
 
+      {activeTab==="All Comments" && (
+        <AllCommentsPanel comments={allComments} showVideo={true} title={`All Analysed Comments - ${formatCount(allComments.length)}`} onExport={onExport} exporting={exporting} />
+      )}
+
       {activeTab==="Mobile" && (
         <MobilePanel phoneMentions={data.phoneMentions || []} title={data.mobileFocus?.query ? `Mobile Mentions Across Compared Videos - ${data.mobileFocus.query}` : "Mobile Mentions Across Compared Videos"} />
       )}
@@ -1010,6 +1149,18 @@ function CompareDashboard({ data, onExport, exporting }) {
                   </div>
                 </div>
               </div>
+              {getVideoLink(video) && (
+                <div style={{marginTop:8}}>
+                  <a
+                    href={getVideoLink(video)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{fontSize:12,color:"var(--accent)",fontWeight:700,textDecoration:"none"}}
+                  >
+                    Watch video on YouTube →
+                  </a>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1034,7 +1185,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
   const router = useRouter();
   const [tab, setTab] = useState("Topics");
   const [sentFilter, setSentFilter] = useState("all");
-  const TABS = ["Overview","Mobile","Topics","Keywords","Comments","Intents","Suggestions","Raw"];
+  const TABS = ["Overview","Mobile","Topics","Keywords","Comments","All Comments","Intents","Suggestions","Raw"];
 
   const { metadata, stats, topics, topKeywords, demandComments, allComments, sentimentStats, sentimentTimeline, intentSummary, suggestions, viralityScore, actionableSteps, analysisEngine } = data;
 
@@ -1056,7 +1207,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       <div style={{display:"flex",gap:2,marginBottom:20,borderBottom:"1px solid var(--border)",overflowX:"auto"}}>
         {TABS.map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{padding:"10px 14px",border:"none",background:"transparent",color:tab===t?"var(--accent)":"var(--text-muted)",fontFamily:"var(--font-display)",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:tab===t?"2px solid var(--accent)":"2px solid transparent",marginBottom:-1,whiteSpace:"nowrap"}}>
-            {t}
+            {t}{t==="Comments" && demandComments?.length ? ` (${demandComments.length})` : t==="All Comments" && allComments?.length ? ` (${allComments.length})` : ""}
           </button>
         ))}
         <button className="btn btn-secondary" onClick={()=>router.push("/")} style={{fontSize:11,padding:"6px 12px",marginLeft:"auto",marginBottom:4}}>← Home</button>
@@ -1136,6 +1287,10 @@ function SingleVideoDetails({ data, onExport, exporting }) {
       {/* ── DEMAND COMMENTS ────────────────────────────────────────────── */}
       {tab==="Comments"&&(
         <DemandPanel comments={demandComments||[]} showVideo={false} sentimentStats={sentimentStats} title={`🎯 Top Comments With Weight — ${(demandComments||[]).length} found`}/>
+      )}
+
+      {tab==="All Comments"&&(
+        <AllCommentsPanel comments={allComments||[]} showVideo={false} title={`All Analysed Comments - ${formatCount((allComments||[]).length)}`} onExport={onExport} exporting={exporting} />
       )}
 
       {tab==="Mobile"&&(
@@ -1284,7 +1439,7 @@ function SingleVideoDetails({ data, onExport, exporting }) {
             <button className="btn btn-secondary" style={{fontSize:11}} onClick={()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="yt-analysis.json";a.click();URL.revokeObjectURL(url);}}>⬇ JSON</button>
           </div>
           <pre style={{padding:14,fontSize:11,color:"var(--green)",overflowX:"auto",maxHeight:500,background:"var(--bg)",lineHeight:1.6}}>
-            {JSON.stringify({metadata,stats,sentimentStats,viralityScore,topics:topics?.slice(0,2),topKeywords:topKeywords?.slice(0,5)},null,2)}
+            {JSON.stringify(data,null,2)}
           </pre>
         </div>
       )}
@@ -1299,26 +1454,40 @@ export default function Dashboard() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("yt_analysis");
-    if (stored) { try { setData(JSON.parse(stored)); } catch { router.push("/"); } }
-    else router.push("/");
+    let active = true;
+    loadLatestAnalysis()
+      .then((stored) => {
+        if (!active) return;
+        if (stored) setData(stored);
+        else router.push("/");
+      })
+      .catch(() => router.push("/"));
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
     if (!data || data.mode === "channels" || data.mode === "compare") return;
-    try {
+    (async () => {
       const history = JSON.parse(localStorage.getItem("yt_history") || "[]");
-      if (history[0]?.data?.metadata?.videoId === data.metadata?.videoId) return;
+      if (history[0]?.label === data.metadata?.title) return;
+      const id = Date.now();
+      const stored = await saveHistoryAnalysis(id, data);
       const entry = {
-        id: Date.now(), type: data.mode || "single",
-        label: data.metadata?.title || "Video Analysis",
-        channels: [data.metadata?.channel || "Unknown"],
-        totalVideos: 1, totalComments: data.stats?.total || 0,
-        createdAt: new Date().toISOString(), data,
+        id,
+        analysisId: stored ? id : null,
+        createdAt: new Date().toISOString(),
+        ...buildHistorySummary(data, {
+          type: data.mode || "single",
+          label: data.metadata?.title || "Video Analysis",
+          channels: [data.metadata?.channel || "Unknown"],
+          totalVideos: 1,
+          totalComments: data.stats?.total || 0,
+        }),
+        data: stored ? undefined : data,
       };
       history.unshift(entry);
       localStorage.setItem("yt_history", JSON.stringify(history.slice(0, 20)));
-    } catch {}
+    })().catch(() => {});
   }, [data]);
 
   if (!data) return (
