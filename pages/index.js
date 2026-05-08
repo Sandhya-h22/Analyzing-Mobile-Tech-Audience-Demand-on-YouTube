@@ -10,7 +10,7 @@ const PIPELINE_STAGES = [
   { id: 3, label: "Tech Classification", desc: "ML keyword scoring",                       icon: "🔬", color: "#7c3aed" },
   { id: 4, label: "Sentiment Analysis",  desc: "Positive / Negative / Neutral",            icon: "😊", color: "#10b981" },
   { id: 5, label: "Intent Detection",    desc: "Purchase · Collab · Support · Request",   icon: "🎯", color: "#ff4d6d" },
-  { id: 6, label: "LDA + K-Means",       desc: "Topic modelling & clustering",             icon: "🤖", color: "#a78bfa" },
+  { id: 6, label: "Topic modelling & clustering",       desc: "Topic modelling & clustering",             icon: "🤖", color: "#a78bfa" },
   { id: 7, label: "Weighted Ranking",    desc: "Virality + Demand score",                  icon: "🏆", color: "#00d4ff" },
 ];
 
