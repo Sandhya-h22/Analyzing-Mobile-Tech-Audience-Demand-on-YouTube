@@ -3,6 +3,7 @@ import { processComments } from "../../lib/nlp.js";
 import { classifyCommentsWithML, bucketComments, groupByPhone } from "../../lib/classifier.js";
 import { analyseTopicsWithML } from "../../lib/tfidf.js";
 import { processAllSentimentsWithML, computeViralityScore, generateActionableSteps, extractContentSuggestions, buildPhoneMentions } from "../../lib/sentiment.js";
+import { assessMobileVideoRelevance } from "../../lib/domainConfig.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_COMMENTS = normalizeConfiguredLimit(process.env.ANALYSIS_MAX_COMMENTS);
@@ -59,13 +60,26 @@ function filterPhoneMentions(phoneMentions = [], mobileFocus = "") {
 async function analyseOneVideo(videoId, apiKey, maxComments, mobileFocus = "", includeReplies) {
   const afterDate = new Date(Date.now() - SEVEN_DAYS_MS).toISOString();
 
-  const [metadata, rawComments] = await Promise.all([
-    fetchVideoMetadata(videoId, apiKey),
-    fetchComments(videoId, maxComments, apiKey, afterDate, {
-      includeReplies: shouldIncludeReplies(includeReplies),
-      order: "relevance",
-    }),
-  ]);
+  const metadata = await fetchVideoMetadata(videoId, apiKey);
+  const relevance = assessMobileVideoRelevance(metadata);
+  if (!relevance.isRelevant) {
+    return {
+      skipped: true,
+      error: relevance.reason,
+      metadata,
+      stats: { total: metadata.commentCount || 0, tech: 0, demand: 0, techPercent: 0, demandPercent: 0 },
+      topics: [],
+      sentiment: null,
+      topKeywords: [],
+      phoneMentions: [],
+      relevance,
+    };
+  }
+
+  const rawComments = await fetchComments(videoId, maxComments, apiKey, afterDate, {
+    includeReplies: shouldIncludeReplies(includeReplies),
+    order: "relevance",
+  });
 
   if (!rawComments.length) {
     return {

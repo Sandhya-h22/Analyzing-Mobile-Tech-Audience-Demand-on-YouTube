@@ -1,374 +1,313 @@
-# YTAnalyser Detailed Project Report
+# YTAnalyser Project Report
 
 ## 1. Project Title
 
-YTAnalyser: ML-Driven YouTube Comment Intelligence for Mobile and Technology Content
+**YTAnalyser: Machine Learning Based YouTube Comment Intelligence for Mobile Technology Videos**
 
 ## 2. Executive Summary
 
-YTAnalyser is a web-based machine learning project that converts YouTube comments into structured audience intelligence. It is designed mainly for mobile, gadgets, software, and technology-oriented content, where viewers frequently express product opinions, buying intent, troubleshooting needs, content requests, and feature-related discussions.
+YTAnalyser is a web-based analytics system that analyzes YouTube comments and converts raw audience discussion into useful creator intelligence. The project is focused mainly on smartphone and mobile technology content, where viewers frequently discuss camera quality, battery life, performance, software issues, pricing, purchase intent, comparisons, feature requests, and follow-up video ideas.
 
-The project accepts a YouTube video URL, multiple video URLs, or selected channel inputs. It collects public video metadata and comments through the YouTube Data API v3, preprocesses the text, runs ML-based classification and sentiment analysis, discovers topic clusters, extracts keywords, ranks high-value audience themes, generates creator-focused suggestions, estimates virality, and displays the outputs in a dashboard.
+The system accepts YouTube video URLs, multiple video URLs, or channel inputs. It collects video metadata and comments through the YouTube Data API v3, cleans and preprocesses the comment text, sends comment batches through an ML-based inference workflow, discovers topics, extracts keywords, calculates sentiment and virality, detects mobile phone mentions, ranks demand comments, and displays everything in an interactive dashboard.
 
-The system is implemented as a Next.js application on the frontend and API layer, supported by a Python FastAPI machine learning service. In the upgraded architecture, the ML service is not only an enhancement but a core dependency of the analytics pipeline. Technical relevance detection, demand classification, intent analysis, sentiment inference, and topic discovery are now driven by model-based inference, making the project an ML-first analytics platform.
+The application is built with **Next.js and React** for the frontend and API layer. A separate **FastAPI Python ML service** performs transformer-based sentiment analysis, intent classification, technical relevance classification, subtopic assignment, BERTopic topic discovery, and KeyBERT keyword extraction. The project also includes an annotation workflow so analyzed comments can be labeled and reused for training a better intent model.
 
-## 3. Important Topics to Highlight
+## 3. Problem Statement
 
-This section captures the most important points to emphasize in a report, presentation, demo, or viva.
+YouTube comments contain valuable feedback, but they are unstructured and difficult to analyze manually. A creator may receive hundreds or thousands of comments under each video. Important signals such as repeated viewer requests, buying questions, negative feedback, software complaints, product comparisons, and content ideas can be missed if the creator reads comments one by one.
 
-### 3.1 Core Identity
+The problem solved by YTAnalyser is:
 
-- YTAnalyser is a machine learning based YouTube comment analysis platform.
-- It transforms raw audience comments into structured and actionable intelligence.
-- It is especially focused on technology and mobile-related content.
+**How can a creator convert large volumes of YouTube comments into structured, ranked, and actionable audience insights?**
 
-### 3.2 Main Technical Contribution
+YTAnalyser solves this by collecting comments, applying NLP and ML processing, and producing clear outputs such as sentiment breakdowns, demand comments, topic groups, phone-specific insights, virality scores, and recommended creator actions.
 
-- The project builds a complete end-to-end ML analytics pipeline.
-- It combines data collection, preprocessing, inference, topic discovery, ranking, and visualization.
-- It uses model-based inference in the main analytics workflow instead of relying only on keyword heuristics.
+## 4. Project Objectives
 
-### 3.3 Most Important Features
+- Fetch public YouTube video, channel, and comment data using YouTube Data API v3.
+- Support trending/mobile channel analysis, custom video comparison, and channel benchmark workflows.
+- Clean, tokenize, normalize, and process noisy social media comment text.
+- Identify whether a comment is technical or non-technical.
+- Detect demand-oriented comments that contain requests, questions, support needs, buying intent, or content expectations.
+- Classify viewer intent using trained or zero-shot ML models.
+- Analyze positive, negative, and neutral sentiment using transformer-based inference.
+- Discover semantic topics from demand comments using BERTopic and KeyBERT.
+- Detect smartphone model mentions and aggregate demand around specific phones.
+- Compute weighted topic scores and virality scores.
+- Generate actionable creator recommendations.
+- Provide CSV, JSONL, and raw JSON exports.
+- Provide an annotation workspace for building a training dataset.
 
-- single-video analysis
-- multi-video comparison
-- recent-channel analysis
-- ML-based technical relevance detection
-- ML-based demand and intent analysis
-- transformer-based sentiment analysis
-- BERTopic topic discovery
-- KeyBERT keyword extraction
-- content suggestion generation
-- virality estimation
-- CSV and JSONL export
-- annotation workflow for training data creation
+## 5. Scope
 
-### 3.4 Most Important ML Concepts
+### 5.1 Included Scope
 
-- transformer-based text classification
-- multi-label intent classification
-- zero-shot classification
-- sentiment inference
-- embedding-based topic discovery
-- semantic keyword extraction
-- dataset preparation
-- annotation-assisted model improvement
+- Top-level YouTube comment analysis.
+- Optional reply analysis when enabled through configuration.
+- Single video analysis through the main analysis route.
+- Multi-video comparison for up to five video URLs.
+- Trending mobile video analysis from predefined top technology channels.
+- Channel benchmark analysis for a user's channel versus competitors.
+- Mobile video relevance filtering.
+- Mobile phone model detection and filtering.
+- ML-based technical relevance, demand, intent, sentiment, topic, and keyword analysis.
+- Dashboard visualization with charts, tables, cards, topic panels, and mobile insights.
+- Browser-based history for previous analysis results.
+- Local annotation storage for intent model improvement.
+- Export support for demand comments, topics, keywords, annotation CSV, and JSONL.
 
-### 3.5 Most Important Engineering Idea
+### 5.2 Out of Scope
 
-- The application uses a split architecture: a Next.js product layer plus a FastAPI ML inference layer.
-- The frontend/backend app orchestrates the workflow, while the Python service performs the heavy ML analysis.
-- `ML_STRICT_MODE=true` makes ML a required part of the analysis path.
+- Authentication and multi-user account management.
+- Permanent database-backed storage for full analysis results.
+- Cloud deployment automation.
+- Full nested conversation/thread analysis beyond optional replies.
+- Multilingual and code-mixed comment analysis.
+- PDF report generation.
+- Scheduled background monitoring.
+- YouTube write actions such as posting replies or pinned comments.
 
-### 3.6 Most Important Status Statement
+## 6. Technology Stack
 
-- The current project is now best described as an ML-first analytics system.
-- The codebase still contains some heuristic utilities, but the main analysis path depends on ML services and model-driven inference.
-
-## 4. Problem Statement
-
-YouTube comments contain valuable audience feedback, but that information is hidden in large volumes of unstructured text. A creator or analyst may need to read hundreds or thousands of comments to understand what viewers are asking for, what problems they are facing, what products they are interested in, and which themes should influence future content strategy.
-
-Manual review is slow, inconsistent, and difficult to scale. Important patterns such as repeated requests, user frustration, buying signals, and emerging themes can easily be missed.
-
-The core problem addressed by YTAnalyser is the transformation of raw YouTube comments into usable, structured, and actionable audience intelligence.
-
-The system addresses this problem by converting comment text into:
-
-- sentiment summaries
-- demand-oriented topic clusters
-- viewer intent labels
-- ranked keywords and themes
-- follow-up content suggestions
-- creator-focused action points
-- exportable structured datasets
-
-## 5. Project Objectives
-
-The major objectives of the project are:
-
-- Build a browser-based machine learning platform for YouTube comment intelligence.
-- Support single-video, multi-video, and recent-channel analysis workflows.
-- Fetch public video and comment data through the official YouTube API.
-- Clean and normalize noisy social-text comments before inference.
-- Detect whether comments are technically relevant to the target domain.
-- Identify demand-oriented comments that represent requests, issues, or buying interest.
-- Classify comments into meaningful intent labels.
-- Compute overall positive, negative, and neutral sentiment patterns.
-- Discover semantic topics and repeated viewer themes.
-- Rank discussion themes using weighted scoring logic.
-- Generate creator-facing suggestions and recommendations.
-- Support annotation and dataset-building for model training and future improvement.
-
-## 6. Scope of the Project
-
-### Included in the Current Scope
-
-- analysis of YouTube top-level comments
-- video and channel metadata retrieval
-- single-video analysis
-- multi-video comparison
-- recent-channel analysis
-- ML-first classification and inference workflow
-- transformer-based sentiment analysis
-- ML-based technical relevance and subtopic classification
-- intent detection using trained or zero-shot models
-- BERTopic topic discovery
-- KeyBERT keyword extraction
-- dashboard visualization
-- CSV and JSONL export
-- local annotation workflow for training data collection
-
-### Not Included in the Current Scope
-
-- full reply-thread conversation analysis
-- multilingual or code-mixed NLP support
-- database-backed storage
-- authentication and user management
-- scheduled monitoring automation
-- PDF report generation
-
-## 7. Technology Stack
-
-### Frontend
+### 6.1 Frontend
 
 - Next.js 14
 - React 18
 - Recharts
-- Custom CSS in `styles/globals.css`
+- CSS in `styles/globals.css`
+- Browser `sessionStorage` and `localStorage`
 
-### Backend
+### 6.2 Backend/API Layer
 
 - Next.js API routes
 - JavaScript
+- YouTube Data API v3 integration
+- CSV and JSONL export generation
+- File-system based annotation persistence
 
-### ML Service
+### 6.3 Machine Learning Service
 
-- FastAPI
 - Python
+- FastAPI
+- Pydantic
 - Hugging Face Transformers
 - Sentence Transformers
 - BERTopic
 - KeyBERT
-- NumPy
 - scikit-learn
-- datasets
 - PyTorch
+- datasets
 
-### Libraries Used in the Main App
-
-- `axios`
-- `natural`
-- `compromise`
-- `papaparse`
-
-### External Services
+### 6.4 Main External Services
 
 - YouTube Data API v3
-- optional Hugging Face hosted inference for intent models
+- Optional Hugging Face hosted inference API for intent models
 
-## 8. High-Level System Architecture
+## 7. High-Level Architecture
 
-The project follows a layered ML-first architecture centered on a Next.js application and a dedicated FastAPI inference service.
+The project uses a split architecture:
 
-### Architecture Layers
+1. **Frontend/Product Layer**
+   - Implemented in `pages/index.js`, `pages/dashboard.js`, `pages/annotate.js`, and reusable components.
+   - Handles user input, mode selection, dashboard rendering, exports, local history, and annotation UI.
 
-- Presentation layer: pages and reusable UI components
-- API layer: request handling and orchestration
-- Preprocessing layer: cleaning, tokenization, normalization
-- ML inference layer: classification, sentiment, and topic discovery
-- Analytics layer: ranking, suggestion generation, virality estimation
-- Integration layer: YouTube API communication and export generation
+2. **Next.js API Orchestration Layer**
+   - Implemented in `pages/api/*.js`.
+   - Validates requests, calls YouTube API helpers, processes comments, calls ML service endpoints, aggregates results, and returns dashboard-ready JSON.
 
-### End-to-End Flow
+3. **Data Collection Layer**
+   - Implemented in `lib/youtube.js`.
+   - Fetches video metadata, channel information, recent videos, top videos, top-level comments, and optional replies.
 
-1. The user selects an analysis mode and submits YouTube input.
-2. The frontend sends the request to a Next.js API route.
-3. The backend validates the request and loads configuration.
-4. The backend fetches video metadata and top-level comments through the YouTube API.
-5. Comment text is cleaned and normalized.
-6. The Next.js backend sends comment data to the ML service.
-7. The ML service performs technical relevance classification, demand detection, intent analysis, and subtopic classification.
-8. The ML service performs sentiment inference.
-9. The ML service discovers semantic topics and extracts keywords.
-10. The backend ranks results, computes virality, and generates actionable steps.
-11. The frontend renders the final outputs in the dashboard.
-12. The user can export results or annotate comments for future model improvement.
+4. **NLP and Classification Layer**
+   - Implemented in `lib/nlp.js`, `lib/classifier.js`, `lib/domainConfig.js`, `lib/tfidf.js`, and `lib/sentiment.js`.
+   - Cleans comments, detects domain relevance, identifies phones, groups comments, ranks topics, builds sentiment summaries, and generates recommendations.
 
-### ML-Strict Design
+5. **ML Inference Layer**
+   - Implemented in `ml-service/app.py`.
+   - Provides `/sentiment/batch`, `/intent/batch`, `/classify/batch`, `/topics`, `/keywords`, and `/health`.
 
-The upgraded pipeline uses `ML_STRICT_MODE=true`, which means analysis now expects the ML service to be available. If the ML layer is unavailable, the system fails clearly instead of silently falling back to a local heuristic path.
+6. **Storage Layer**
+   - YouTube remains the live source of video and comment data.
+   - Analysis results are temporarily stored in browser `sessionStorage`.
+   - Recent analysis history is stored in browser `localStorage`.
+   - Human-labeled annotation data is stored locally in `ml-service/data/intent_annotations.json`.
 
-## 9. Project Structure
+## 8. Project Structure
 
-### Main Pages
+```text
+yt-analyzer/
+|-- components/
+|   |-- MobilePanel.jsx
+|   |-- Navbar.js
+|   |-- StatCard.js
+|   |-- TopicCard.js
+|
+|-- lib/
+|   |-- audienceQa.js
+|   |-- classifier.js
+|   |-- domainConfig.js
+|   |-- mlClient.js
+|   |-- nlp.js
+|   |-- sentiment.js
+|   |-- tfidf.js
+|   |-- youtube.js
+|
+|-- pages/
+|   |-- _app.js
+|   |-- index.js
+|   |-- dashboard.js
+|   |-- annotate.js
+|   |-- api/
+|       |-- analyse.js
+|       |-- annotations.js
+|       |-- audience-qa.js
+|       |-- channel.js
+|       |-- compare.js
+|       |-- export.js
+|       |-- trending.js
+|
+|-- ml-service/
+|   |-- app.py
+|   |-- train_intent.py
+|   |-- prepare_intent_dataset.py
+|   |-- evaluate_intent.py
+|   |-- requirements.txt
+|   |-- README.md
+|   |-- data/
+|       |-- intent_annotations.json
+|       |-- sample_intent_train.jsonl
+|       |-- sample_intent_valid.jsonl
+|
+|-- styles/
+|   |-- globals.css
+|
+|-- package.json
+|-- next.config.js
+|-- PROJECT_REPORT.md
+```
 
-- `pages/index.js`
-  Landing page, mode selection, input forms, progress UI, and recent session access.
+## 9. Functional Modules
 
-- `pages/dashboard.js`
-  Dashboard for rendering analysis outputs across supported modes.
+### 9.1 Home and Input Module
 
-- `pages/annotate.js`
-  Annotation workspace for labeling intent data from the latest analysis session.
+File: `pages/index.js`
 
-### API Routes
+The home page is the starting point of the application. It provides:
 
-- `pages/api/analyse.js`
-  Main orchestration endpoint for single, compare, and channels analysis modes.
+- Trending videos mode.
+- Compare videos mode.
+- Channel benchmark mode.
+- Search history mode.
+- Optional phone filter, such as `iPhone 16 Pro`, `Pixel 9`, or `S24 Ultra`.
+- Days-back selector for channel workflows.
+- Pipeline progress visualization.
+- Error display for failed analysis.
 
-- `pages/api/compare.js`
-  Comparison-specific analysis route.
+The page stores successful analysis results in `sessionStorage` using the key `yt_analysis`, then redirects the user to `/dashboard`.
 
-- `pages/api/channel.js`
-  Channel lookup and recent-video helper route.
+### 9.2 Dashboard Module
 
-- `pages/api/trending.js`
-  Helper route for recent/trending-style workflows.
+File: `pages/dashboard.js`
 
-- `pages/api/export.js`
-  CSV and JSONL export endpoint.
+The dashboard reads the latest analysis from browser `sessionStorage` and renders different dashboards depending on the analysis mode:
 
-- `pages/api/annotations.js`
-  Saves and retrieves manual annotation data for future model training.
+- Single video dashboard.
+- Compare dashboard.
+- Channels dashboard.
 
-### Core Libraries
+Dashboard features include:
 
-- `lib/youtube.js`
-  Fetches metadata, comments, channel details, and recent uploads.
+- Summary stat cards.
+- Virality meter.
+- Sentiment charts.
+- Demand-by-topic charts.
+- Topic ranking cards.
+- Demand comment explorer.
+- Intent summary panels.
+- Suggestion cards.
+- Actionable recommendation cards.
+- Mobile phone mention panels.
+- Sentiment timeline.
+- Raw JSON preview.
+- Export buttons.
+- ML integration status panel.
+- Audience Q&A that answers creator questions from relevant analyzed comments and shows supporting evidence.
 
-- `lib/nlp.js`
-  Handles text cleaning, tokenization, stopword removal, and normalization.
+### 9.3 Annotation Module
 
-- `lib/classifier.js`
-  Coordinates ML-based technical detection, demand detection, intent handling, and strict ML behavior.
+File: `pages/annotate.js`
 
-- `lib/domainConfig.js`
-  Stores domain-related categories and labels used for analysis guidance and compatibility.
+The annotation page loads demand comments from the latest analysis stored in `sessionStorage`. A user can label each comment with one or more intent labels:
 
-- `lib/tfidf.js`
-  Contains ranking utilities and ML topic integration logic.
+- `purchase_intent`
+- `content_request`
+- `support_request`
+- `collaboration`
+- `praise`
+- `question`
+- `general`
 
-- `lib/sentiment.js`
-  Handles sentiment result processing, suggestion extraction, virality estimation, and actionable step generation.
+The labels are saved through `/api/annotations` into the local JSON annotation store. This creates training data for the intent model.
 
-- `lib/mlClient.js`
-  Connects the main app to the FastAPI ML service or hosted model endpoints.
+### 9.4 YouTube Data Module
 
-### ML Service Files
+File: `lib/youtube.js`
 
-- `ml-service/app.py`
-  Main FastAPI inference service.
+This module handles communication with YouTube Data API v3. It supports:
 
-- `ml-service/train_intent.py`
-  Fine-tuning script for the multi-label DistilBERT intent model.
+- Extracting video IDs from YouTube URLs, short links, Shorts links, embed links, and raw video IDs.
+- Fetching video metadata.
+- Fetching top-level comments.
+- Fetching replies when reply inclusion is enabled.
+- Resolving channel IDs from handles, URLs, or direct channel IDs.
+- Fetching channel information and subscriber/video/view counts.
+- Fetching recent uploads from a channel.
+- Fetching top channel videos.
+- Searching mobile-related videos.
 
-- `ml-service/prepare_intent_dataset.py`
-  Converts annotation data into train and validation JSONL datasets.
+Collected video metadata includes:
 
-- `ml-service/evaluate_intent.py`
-  Evaluates model quality against the rule-based baseline.
+- `videoId`
+- `title`
+- `channel`
+- `channelId`
+- `publishedAt`
+- `thumbnail`
+- `viewCount`
+- `likeCount`
+- `commentCount`
+- `description`
 
-## 10. Supported Analysis Modes
+Collected comment data includes:
 
-### 10.1 Single Video Analysis
+- `commentId`
+- `parentId`
+- `isReply`
+- `author`
+- `text`
+- `likeCount`
+- `replyCount`
+- `publishedAt`
+- `videoId`
 
-The user enters one YouTube video URL. The system:
+### 9.5 NLP Preprocessing Module
 
-- extracts the video ID
-- fetches video metadata
-- collects comments
-- runs the ML-based analytics pipeline
-- renders a detailed dashboard for that video
+File: `lib/nlp.js`
 
-### 10.2 Multi-Video Comparison
+The NLP preprocessing module converts raw comment text into normalized text for downstream analysis. It performs:
 
-The user enters multiple YouTube URLs. The system:
+- Lowercase conversion.
+- URL removal.
+- Mention removal.
+- Hashtag removal.
+- Punctuation cleanup.
+- Long number cleanup.
+- Tokenization.
+- Stopword removal.
+- Lightweight lemmatization.
 
-- analyzes each video independently
-- returns structured results for each video
-- merges high-value demand comments across videos
-- compares demand, sentiment, topic, and virality patterns
-
-### 10.3 Channel-Based Recent Analysis
-
-The user selects or enters channels for a recent time window. The system:
-
-- resolves channel identifiers
-- fetches recent videos from each channel
-- analyzes each video separately
-- aggregates cross-channel insights
-- surfaces high-demand and high-virality videos
-
-## 11. Detailed Processing Pipeline
-
-### 11.1 Input Handling and Validation
-
-Implemented mainly in `pages/index.js` and `pages/api/analyse.js`.
-
-This stage:
-
-- collects user input
-- validates required fields
-- determines the requested analysis mode
-- loads the YouTube API key
-- routes the request into the correct workflow
-
-### 11.2 YouTube Data Collection
-
-Implemented in `lib/youtube.js`.
-
-Main capabilities:
-
-- extract video IDs from common YouTube URL formats
-- fetch video metadata
-- fetch top-level comments
-- resolve channel IDs from handles, URLs, or explicit IDs
-- fetch channel details
-- fetch recent uploads from a channel
-
-Metadata collected:
-
-- video ID
-- title
-- channel name
-- channel ID
-- publication date
-- thumbnail
-- view count
-- like count
-- comment count
-- short description
-
-Comment fields collected:
-
-- comment ID
-- author
-- original text
-- like count
-- reply count
-- publication date
-- source video ID
-
-### 11.3 NLP Preprocessing
-
-Implemented in `lib/nlp.js`.
-
-This stage converts noisy user comments into normalized text before ML inference.
-
-Operations performed:
-
-- lowercase conversion
-- URL removal
-- mention removal
-- hashtag cleanup
-- punctuation cleanup
-- numeric noise removal
-- tokenization
-- stopword removal
-- normalization and lightweight lemmatization
-
-Output per comment:
+Each processed comment receives:
 
 - `original`
 - `cleaned`
@@ -376,44 +315,174 @@ Output per comment:
 - `processedTokens`
 - `processedText`
 
-### 11.4 ML-Based Technical Relevance Detection
+### 9.6 Domain and Mobile Detection Module
 
-Implemented through `ml-service/app.py` and consumed by `lib/classifier.js`.
+File: `lib/domainConfig.js`
 
-Instead of simple keyword scoring, the upgraded system uses model-based inference to decide whether a comment is technical or non-technical.
+This module contains domain definitions, keyword lists, mobile phone model aliases, mobile relevance checks, and subtopic categories.
 
-Outputs:
+Supported domain options include:
+
+- Technology
+- Gaming
+- Finance
+- Fitness
+
+The main project focus is technology/mobile. Mobile subtopics include:
+
+- Smartphone Cameras
+- Battery and Charging
+- Performance and Gaming
+- Display and Design
+- Software and UI
+- Comparisons and Reviews
+- Connectivity and Features
+- Pricing and Availability
+
+The module also detects phone models using predefined aliases and generic regex patterns for brands such as Apple, Samsung, Google, OnePlus, Xiaomi, Redmi, Poco, Realme, Vivo, Oppo, Motorola, Nothing, iQOO, and Asus.
+
+### 9.7 Classification Module
+
+File: `lib/classifier.js`
+
+This module coordinates comment classification. It calls the ML service through `lib/mlClient.js`, then enriches each processed comment with:
 
 - `isTech`
 - `techScore`
-- optional label score distribution
-
-This stage helps the system focus later analytics on domain-relevant comments.
-
-### 11.5 ML-Based Demand Detection
-
-Implemented through the ML classification workflow.
-
-This stage determines whether a technical comment also expresses audience demand, such as:
-
-- a request
-- a need
-- a troubleshooting problem
-- a buying question
-- a follow-up content expectation
-
-Outputs:
-
 - `isDemand`
 - `demandScore`
 - `demandMatches`
 - `isQuestion`
+- `intents`
+- `primaryIntent`
+- `domainKey`
+- `detectedPhones`
+- `subtopic`
 
-### 11.6 Intent Classification
+If `ML_STRICT_MODE=true`, failed ML classification causes the analysis request to fail clearly. If strict mode is disabled, local rule-based heuristics can be used as fallback.
 
-Implemented through a trained multi-label DistilBERT model when available, with zero-shot classification support as a model-based fallback.
+### 9.8 Sentiment, Virality, Suggestions, and Actions Module
 
-Supported intent labels:
+File: `lib/sentiment.js`
+
+This module handles:
+
+- Sentiment processing.
+- Sentiment summaries.
+- Intent summaries.
+- Content suggestion extraction.
+- Virality score calculation.
+- Actionable recommendation generation.
+- Sentiment timeline generation.
+- Phone mention aggregation.
+
+The virality score is calculated from:
+
+- Comment volume.
+- Average likes per comment.
+- Positive sentiment ratio.
+- Demand ratio.
+- Comment recency.
+
+Virality labels:
+
+- Viral
+- High Reach
+- Moderate
+- Low Reach
+
+### 9.9 Topic and Keyword Module
+
+File: `lib/tfidf.js`
+
+This module performs topic analysis and ranking. In ML mode, it calls the FastAPI `/topics` endpoint. In fallback mode, it can use local TF-IDF, domain subtopics, and clustering-style grouping.
+
+Weighted topic ranking uses:
+
+- Frequency score: 40%
+- Engagement score: 30%
+- Recency score: 20%
+- Diversity score: 10%
+
+Topic outputs include:
+
+- `topicKey`
+- `label`
+- `emoji`
+- `color`
+- `commentCount`
+- `topWords`
+- `weightedScore`
+- `frequencyScore`
+- `engagementScore`
+- `recencyScore`
+- `diversityScore`
+- `confidence`
+- `sampleComments`
+
+### 9.10 ML Client Module
+
+File: `lib/mlClient.js`
+
+This module connects the Next.js app to external ML inference. It supports:
+
+- Local FastAPI ML service through `ML_SERVICE_URL`.
+- Optional Hugging Face hosted intent inference through `HF_INTENT_API_URL`.
+- Timeout control through `ML_SERVICE_TIMEOUT_MS`.
+- Sentiment inference.
+- Intent inference.
+- Comment classification inference.
+- Topic inference.
+- Keyword inference.
+
+### 9.11 Audience Q&A Module
+
+Files: `lib/audienceQa.js`, `pages/api/audience-qa.js`, and `pages/dashboard.js`
+
+The dashboard lets a creator ask a question about the analyzed audience comments. The API selects a small set of relevant comments using token overlap and engagement signals, then returns a concise answer with up to eight evidence comments. It uses OpenAI when `OPENAI_API_KEY` is configured, otherwise tries Anthropic when `ANTHROPIC_API_KEY` is configured, and otherwise returns a local comment-based summary. The response identifies the engine used; model-generated answers are instructed to rely only on supplied comments.
+
+## 10. Machine Learning Service
+
+File: `ml-service/app.py`
+
+The ML service is a FastAPI application that exposes the model inference endpoints required by the analytics pipeline.
+
+### 10.1 `/health`
+
+Returns service health and active model information:
+
+- `status`
+- `sentimentModel`
+- `intentModelPath`
+
+### 10.2 `/sentiment/batch`
+
+Analyzes a batch of comments using:
+
+- `cardiffnlp/twitter-roberta-base-sentiment`
+
+Output per comment:
+
+- Sentiment label.
+- Sentiment score.
+- Magnitude.
+- Probability distribution.
+- Model name.
+
+### 10.3 `/intent/batch`
+
+Classifies intent for a batch of comments.
+
+The service prefers a trained multi-label intent model from:
+
+- `ml-service/models/intent`
+- Or another valid model directory under `ml-service/models`
+
+If no trained model is available, it falls back to zero-shot classification with:
+
+- `facebook/bart-large-mnli`
+
+Intent labels:
 
 - `purchase_intent`
 - `content_request`
@@ -422,137 +491,388 @@ Supported intent labels:
 - `praise`
 - `question`
 
-Outputs:
+### 10.4 `/classify/batch`
 
-- `intents`
-- `primaryIntent`
-- score distribution for predicted labels
+Performs combined classification:
 
-This is one of the central ML contributions of the project.
+- Technical relevance.
+- Demand detection.
+- Intent assignment.
+- Subtopic classification.
 
-### 11.7 ML-Based Subtopic Assignment
+Technical relevance and subtopic assignment use zero-shot classification. Intent classification uses a trained model when available, otherwise zero-shot inference.
 
-Implemented through the ML service classification pipeline.
+### 10.5 `/topics`
 
-Comments are assigned to subtopics such as:
+Discovers semantic topic clusters from demand comments using:
 
-- smartphone camera
-- battery
-- performance
-- display
-- software
-- comparison
-- connectivity
-- pricing
-- programming tutorials
-- AI/ML
-- cybersecurity
-- general tech
+- Sentence Transformers embeddings.
+- BERTopic.
+- KeyBERT.
 
-This improves semantic grouping and downstream visualization.
+If BERTopic cannot form stable topic groups, the service falls back to a KeyBERT-based topic grouping method.
 
-### 11.8 Transformer-Based Sentiment Analysis
+### 10.6 `/keywords`
 
-Implemented through `ml-service/app.py` and coordinated in `lib/sentiment.js`.
+Extracts semantic keywords and keyphrases using KeyBERT.
 
-The project uses a transformer sentiment model:
+## 11. Database and Storage Design
 
-- `cardiffnlp/twitter-roberta-base-sentiment`
+The project does not use a traditional relational database such as MySQL or PostgreSQL. Instead, it uses three storage layers that match the current project scope.
 
-Outputs per comment:
+### 11.1 Live External Data Source: YouTube API
 
-- `sentiment`
-- `magnitude`
-- `sentimentScore`
-- probability distribution
+YouTube Data API v3 acts as the live source for:
 
-Aggregate outputs:
+- Video metadata.
+- Channel metadata.
+- Recent uploads.
+- Public comments.
+- Comment replies when enabled.
 
-- positive count
-- negative count
-- neutral count
-- total count
-- average sentiment score
+This data is fetched on demand and is not permanently stored in a server-side database.
 
-### 11.9 Topic Discovery and Keyword Extraction
+### 11.2 Browser Session Storage
 
-Implemented through the ML service.
+Storage key:
 
-Topic discovery uses:
+- `yt_analysis`
 
-- BERTopic
-- sentence embeddings
+Used for:
 
-Keyword extraction uses:
+- Holding the latest full analysis result.
+- Passing data from `pages/index.js` to `pages/dashboard.js`.
+- Loading demand comments into `pages/annotate.js`.
 
-- KeyBERT
+Reason:
 
-This is more semantically meaningful than simple keyword grouping because topic formation is driven by embeddings and model-based similarity instead of only fixed token matches.
+- The dashboard can render without refetching immediately after analysis.
+- It keeps the workflow simple for a local/single-user project.
 
-### 11.10 Weighted Topic Ranking
+### 11.3 Browser Local Storage
 
-After topic discovery, results are ranked using a weighted score based on:
+Storage key:
 
-- frequency: 40%
-- engagement: 30%
-- recency: 20%
-- diversity: 10%
+- `yt_history`
 
-This makes topic ranking more useful than pure frequency counting because it considers viewer interaction and freshness.
+Used for:
 
-### 11.11 Suggestion Extraction
+- Saving the last 20 analysis sessions.
+- Showing searchable history on the home page.
+- Reopening older analysis results.
 
-Implemented in `lib/sentiment.js`.
+Stored history fields include:
 
-The system extracts future-content suggestions mainly from comments whose primary intent is `content_request`.
+- `id`
+- `createdAt`
+- `type`
+- `label`
+- `channels`
+- `totalVideos`
+- `totalComments`
+- `topVideos`
+- `data`
 
-The output includes:
+### 11.4 Local JSON Annotation Database
 
-- suggestion text
-- frequency
-- likes
-- author count
-- supporting comments
+File:
 
-### 11.12 Virality Score Estimation
+- `ml-service/data/intent_annotations.json`
 
-Implemented in `lib/sentiment.js`.
+API:
 
-The system estimates a score from 0 to 100 using:
+- `pages/api/annotations.js`
 
-- comment volume
-- average likes per comment
-- positive sentiment ratio
-- demand ratio
-- comment recency
+This file is the project's local annotation database. It stores manually labeled examples for future model training.
 
-Labels used:
+Annotation schema:
 
-- `Viral`
-- `High Reach`
-- `Moderate`
-- `Low Reach`
+```json
+{
+  "commentId": "comment identifier",
+  "text": "original comment text",
+  "author": "comment author",
+  "label": "primary label",
+  "labels": ["content_request", "question"],
+  "notes": "optional annotation note",
+  "sourceVideoTitle": "video title",
+  "sourceVideoChannel": "channel name",
+  "updatedAt": "ISO timestamp"
+}
+```
 
-### 11.13 Actionable Recommendation Generation
+Supported annotation operations:
 
-Implemented in `lib/sentiment.js`.
+- `GET /api/annotations`: read saved annotations.
+- `POST /api/annotations`: insert or update an annotation by `commentId`.
+- `DELETE /api/annotations`: remove an annotation by `commentId`.
 
-This stage converts analytics into creator-facing action points such as:
+### 11.5 Training Dataset Files
 
-- create more content around the strongest topic
-- address negative audience feedback
-- publish support or troubleshooting content
-- follow up on repeated content requests
-- improve hook and thumbnail when virality is low
-- add product links when purchase intent is strong
+The ML service contains dataset files under `ml-service/data/`:
 
-This stage is important because it converts ML outputs into practical decision support.
+- `sample_intent_train.jsonl`
+- `sample_intent_valid.jsonl`
+- `intent_annotations.json`
 
-## 12. API Design Summary
+The script `prepare_intent_dataset.py` can convert saved annotations into training and validation JSONL files.
 
-### 12.1 `POST /api/analyse`
+## 12. Main Application Flows
 
-Primary endpoint for all major analysis workflows.
+### 12.1 Trending Mobile Channel Flow
+
+1. User opens the home page.
+2. User selects Trending Videos mode.
+3. User selects a time window such as 1, 3, 7, or 14 days.
+4. User optionally enters a phone filter.
+5. Frontend sends `POST /api/analyse` with `mode: "channels"`.
+6. Backend resolves predefined top mobile technology channels.
+7. If `rankBySubscribers=true`, channels are sorted by subscriber count and top channels are selected.
+8. Backend fetches recent videos from selected channels.
+9. Non-mobile videos are skipped using mobile relevance filtering.
+10. Comments are fetched from each relevant video.
+11. Comments are cleaned and processed.
+12. ML classification, sentiment, topic, and keyword analysis runs.
+13. Results are aggregated across channels.
+14. Dashboard displays benchmark cards, top videos, demand comments, phone mentions, and aggregate stats.
+15. Result is saved to browser history.
+
+### 12.2 Compare Videos Flow
+
+1. User selects Compare mode.
+2. User pastes up to five YouTube video URLs.
+3. Frontend sends `POST /api/analyse` with `mode: "compare"`.
+4. Backend deduplicates and validates URLs.
+5. Each video is analyzed independently.
+6. For each video, metadata and comments are collected.
+7. Mobile relevance filtering is applied.
+8. NLP, ML classification, sentiment analysis, topic discovery, and virality scoring are performed.
+9. Backend merges high-value demand comments across all videos.
+10. Dashboard compares demand, sentiment, topics, virality, and phone mentions.
+
+### 12.3 Channel Benchmark Flow
+
+1. User selects Benchmark Channels mode.
+2. User enters their channel and at least one competitor channel.
+3. Frontend sends channel inputs to `POST /api/analyse` with `mode: "channels"`.
+4. Backend resolves channel IDs.
+5. Backend fetches channel info and recent videos.
+6. Each relevant video is analyzed.
+7. Aggregate channel benchmarks are built.
+8. Dashboard shows channel-level demand rate, sentiment, virality, views, comments, topics, and top videos.
+
+### 12.4 Single Video Analysis Flow
+
+The API supports single video analysis through `mode: "single"` even though the current home UI emphasizes trending, compare, and benchmark flows.
+
+1. Client sends `POST /api/analyse` with `mode: "single"` and a YouTube URL.
+2. Backend extracts the video ID.
+3. Backend fetches metadata and comments.
+4. Backend processes and classifies comments.
+5. Backend returns a full dashboard-ready result for one video.
+
+### 12.5 Annotation Flow
+
+1. User runs any analysis.
+2. Analysis result is stored in `sessionStorage`.
+3. User opens `/annotate`.
+4. Annotation page extracts demand comments from the latest result.
+5. User labels each comment with one or more intent labels.
+6. Frontend sends annotation data to `POST /api/annotations`.
+7. API saves or updates the record in `ml-service/data/intent_annotations.json`.
+8. Later, `prepare_intent_dataset.py` converts annotations into JSONL files.
+9. `train_intent.py` trains a multi-label intent model.
+10. The trained model can be loaded automatically from `ml-service/models/intent`.
+
+## 13. Detailed Analysis Pipeline
+
+### Step 1: Input Validation
+
+The backend checks:
+
+- Request method.
+- Required fields.
+- Valid analysis mode.
+- YouTube API key availability.
+- URL count limits.
+- Channel input validity.
+- Maximum comment limits.
+
+Important environment variables:
+
+- `YOUTUBE_API_KEY`
+- `NEXT_PUBLIC_YOUTUBE_API_KEY`
+- `ANALYSIS_MAX_COMMENTS`
+- `CHANNEL_ANALYSIS_MAX_COMMENTS`
+- `CHANNEL_ANALYSIS_MAX_VIDEOS`
+- `ANALYSIS_INCLUDE_REPLIES`
+
+### Step 2: Video and Channel Data Collection
+
+The system fetches:
+
+- Video title.
+- Channel name.
+- Channel ID.
+- Publication date.
+- Thumbnail.
+- Description.
+- View count.
+- Like count.
+- Public comment count.
+- Recent channel uploads.
+- Public comments and optional replies.
+
+### Step 3: Mobile Relevance Filtering
+
+Before heavy analysis, the system checks if a video is relevant to the mobile technology focus. It uses:
+
+- Mobile keyword matching.
+- Phone model detection.
+- Non-mobile exclusion keywords.
+
+If a video is not mobile-related, it is skipped with a clear reason.
+
+### Step 4: Comment Preprocessing
+
+Each comment is cleaned and converted into:
+
+- Cleaned text.
+- Filtered tokens.
+- Lemmatized tokens.
+- Processed text.
+
+This prepares comments for model input and fallback logic.
+
+### Step 5: ML Classification
+
+The backend sends comments to `/classify/batch`. The ML service returns:
+
+- Technical relevance.
+- Technical score.
+- Demand classification.
+- Demand score.
+- Intent scores.
+- Primary intent.
+- Subtopic.
+- Label score distributions.
+
+### Step 6: Comment Bucketing
+
+Classified comments are grouped into:
+
+- Technical demand comments.
+- Technical non-demand comments.
+- Non-technical comments.
+
+Demand comments are the most important group for topic discovery and recommendations.
+
+### Step 7: Topic Discovery
+
+Demand comments are sent to `/topics`. The ML service uses BERTopic and KeyBERT to produce:
+
+- Topic clusters.
+- Topic labels.
+- Topic keywords.
+- Topic confidence.
+- Comment membership.
+
+If BERTopic fails, a KeyBERT fallback creates usable topic groups.
+
+### Step 8: Sentiment Analysis
+
+All classified comments are sent to `/sentiment/batch`. The service returns sentiment for each comment:
+
+- Positive.
+- Negative.
+- Neutral.
+
+The backend builds:
+
+- Sentiment counts.
+- Average sentiment score.
+- Sentiment timeline.
+- Intent summary.
+
+### Step 9: Phone Mention Aggregation
+
+The system detects phone models mentioned in comments and aggregates:
+
+- Mention count.
+- Demand count.
+- Demand percentage.
+- Sentiment around the phone.
+- Intent summary.
+- Example comments.
+- Phone-specific recommendations.
+
+This is especially useful for comparing products such as iPhone, Samsung Galaxy, Pixel, OnePlus, Redmi, and other models.
+
+### Step 10: Weighted Ranking
+
+Topics are ranked using:
+
+- Frequency: how often the topic appears.
+- Engagement: likes and replies on related comments.
+- Recency: how recently comments appeared.
+- Diversity: vocabulary diversity inside the topic.
+
+This avoids ranking topics only by raw frequency.
+
+### Step 11: Suggestion Extraction
+
+The system extracts content suggestions from comments whose primary intent is `content_request`. Trigger phrases include:
+
+- `make a video on`
+- `please cover`
+- `tutorial on`
+- `explain`
+- `how to`
+- `part 2`
+- `next video on`
+
+Output includes:
+
+- Suggestion text.
+- Trigger phrase.
+- Count.
+- Likes.
+- Author count.
+- Matched comments.
+
+### Step 12: Virality Score Calculation
+
+The system calculates a score from 0 to 100 using:
+
+- Comment volume.
+- Average likes per comment.
+- Positive sentiment ratio.
+- Demand ratio.
+- Comment recency.
+
+The score is returned with a label and reasoning text.
+
+### Step 13: Actionable Steps
+
+The system generates creator-facing recommendations such as:
+
+- Create a video on the strongest topic.
+- Address negative viewer frustrations.
+- Add a pinned FAQ or troubleshooting guide.
+- Make a follow-up video requested by viewers.
+- Improve hook and thumbnail when virality is low.
+- Add affiliate links or product recommendations when purchase intent is strong.
+- Explore collaboration opportunities when collaboration intent appears.
+
+### Step 14: Dashboard Rendering and Export
+
+The final JSON response is stored in `sessionStorage`, rendered in `/dashboard`, and can be exported through `/api/export`.
+
+## 14. API Route Summary
+
+### 14.1 `POST /api/analyse`
+
+Main orchestration endpoint.
 
 Supported modes:
 
@@ -560,208 +880,319 @@ Supported modes:
 - `compare`
 - `channels`
 
-Important response sections:
+Returns:
 
-- metadata
-- statistics
-- topics
-- top keywords
-- demand comments
-- all comments
-- sentiment summary
-- intent summary
-- suggestions
-- virality score
-- actionable steps
-- ML engine summary
+- Metadata.
+- Stats.
+- Topics.
+- Keywords.
+- Demand comments.
+- All comments.
+- Sentiment stats.
+- Intent summary.
+- Analysis engine status.
+- Suggestions.
+- Virality score.
+- Actionable steps.
+- Sentiment timeline.
+- Phone mentions.
+- Domain options.
+- Aggregate results for compare/channel modes.
 
-### 12.2 `POST /api/export`
+### 14.2 `POST /api/compare`
 
-Exports analysis results into downloadable files.
+Dedicated compare endpoint for comparing two to five recent videos. It analyzes comments from the last seven days and returns winners for:
 
-Supported export types:
+- Comment count.
+- Demand rate.
+- Sentiment.
+- Virality.
+- Technical engagement.
 
-- demand comments CSV
-- topics CSV
-- keywords CSV
-- intent annotation CSV
-- intent JSONL
+### 14.3 `POST /api/channel`
 
-### 12.3 `GET/POST /api/annotations`
+Fetches the top five recent videos from a channel URL, handle, or channel ID.
 
-Used by the annotation workspace to save and load labeled examples for model training.
+### 14.4 `GET /api/trending`
 
-## 13. Frontend User Experience
+Searches YouTube for mobile/smartphone videos using predefined search queries and returns enriched video metadata.
 
-Implemented mainly in `pages/index.js`, `pages/dashboard.js`, and `pages/annotate.js`.
+### 14.5 `POST /api/export`
 
-### Landing Page Features
+Exports data as:
 
-- analysis mode selection
-- single and multi-video input
-- channel analysis trigger
-- pipeline-progress visualization
-- recent history access
+- Demand comments CSV.
+- Topics CSV.
+- Keywords CSV.
+- Intent annotation CSV.
+- Intent JSONL.
 
-### Dashboard Features
+### 14.6 `GET /api/annotations`
 
-- summary stat cards
-- sentiment charts
-- virality meter
-- topic cards
-- demand-by-topic visualization
-- intent summary panels
-- demand comment explorer
-- suggestion cards
-- actionable step panel
-- raw JSON preview
-- CSV export buttons
-- ML integration status panel
+Reads all saved annotation records from the local annotation JSON database.
 
-### Annotation Workspace Features
+### 14.7 `POST /api/annotations`
 
-- loads latest demand comments from session history
-- supports multi-label annotation
-- saves notes for ambiguous cases
-- builds a dataset for future training
+Creates or updates an annotation record.
 
-## 14. Data Outputs Produced by the System
+### 14.8 `DELETE /api/annotations`
 
-The system produces both machine-readable outputs and presentation-ready outputs.
+Deletes an annotation record by comment ID.
 
-### Structured Outputs
+### 14.9 `POST /api/audience-qa`
 
-- cleaned comments
-- technical relevance predictions
-- demand predictions
-- intent labels
-- ranked demand comments
-- keyword lists
-- topic objects with metrics
-- sentiment summaries
-- intent summaries
-- content suggestion objects
-- virality explanation objects
-- actionable recommendation objects
-- ML engine summary
+Answers a creator question from up to 500 comments supplied by the dashboard. Returns the answer, confidence, engine, themes or suggested action when available, and a set of supporting comments. It does not query YouTube or use comments outside the submitted analysis corpus.
 
-### Exportable Outputs
+## 15. Data Outputs
 
-- demand-comment CSV
-- topic CSV
-- keyword CSV
-- intent-annotation CSV
-- intent JSONL
+### 15.1 Comment-Level Outputs
 
-### Visual Outputs
+- Original text.
+- Processed text.
+- Author.
+- Likes.
+- Replies.
+- Publication date.
+- Technical relevance.
+- Demand flag.
+- Demand score.
+- Demand matches.
+- Intent labels.
+- Primary intent.
+- Subtopic.
+- Sentiment.
+- Sentiment score.
+- Detected phone models.
 
-- charts
-- stat cards
-- ranked lists
-- summaries
-- interactive tables
+### 15.2 Video-Level Outputs
 
-## 15. Current Status of the Project
+- Metadata.
+- Total public comments.
+- Analyzed comments.
+- Top-level comment count.
+- Reply count.
+- View count.
+- Like count.
+- Technical comment count.
+- Demand comment count.
+- Non-technical count.
+- Sentiment summary.
+- Intent summary.
+- Topics.
+- Keywords.
+- Suggestions.
+- Virality score.
+- Actionable steps.
+- Mobile phone mentions.
 
-The project is now in an ML-first stage.
+### 15.3 Channel/Comparison Outputs
 
-### What Is Already Complete
+- Video list.
+- Successful and failed video counts.
+- Skipped videos and reasons.
+- Total comments.
+- Total analyzed comments.
+- Total public comments.
+- Total views.
+- Total likes.
+- Total demand comments.
+- Aggregate sentiment.
+- Top videos by demand.
+- Top videos by virality.
+- Channel benchmarks.
+- Cross-video phone mentions.
 
-- a working Next.js application
-- a complete end-to-end ML-based comment analysis workflow
-- multiple analysis modes
-- dashboard visualization
-- export support
-- annotation workflow
-- ML status reporting in the dashboard
+## 16. ML Strict Mode and Fallback Behavior
 
-### What Is Fully Integrated
+The app supports two operating modes:
 
-- transformer-based sentiment inference
-- ML-based technical relevance classification
-- ML-based demand and subtopic classification
-- model-driven intent analysis
-- BERTopic and KeyBERT topic workflow
-- training and annotation support for model improvement
+### Strict ML Mode
 
-### Correct Technical Description
+Environment variable:
 
-The most accurate description is:
+```env
+ML_STRICT_MODE=true
+```
 
-YTAnalyser is an ML-first YouTube comment intelligence platform powered by a FastAPI inference service and transformer-based NLP workflow.
+In strict mode, ML service availability is required. If classification, sentiment, or topic inference fails, the API request fails with a clear error message.
 
-This reflects the upgraded codebase more accurately than calling it mainly rule-based.
+This mode is best for presenting the project as an ML-first system.
 
-## 16. Strengths of the Project
+### Fallback Mode
 
-- Uses machine learning in the core analytics workflow.
-- Supports practical real-world use cases beyond simple text classification demos.
-- Produces decision-oriented outputs rather than only raw predictions.
-- Combines transformer inference with topic discovery and ranking logic.
-- Includes annotation and dataset-building support, which strengthens the ML lifecycle.
-- Uses modular service separation between application logic and inference logic.
-- Provides visibility into which ML stages were active during analysis.
-- Balances product usability with applied machine learning depth.
+Environment variable:
 
-## 17. Limitations of the Current Version
+```env
+ML_STRICT_MODE=false
+```
 
-- Quality still depends on model configuration and dataset quality.
-- Zero-shot classification is useful but less reliable than a strong domain-trained model.
-- Manual annotation is still necessary for improving intent quality.
-- Full reply-thread discussion analysis is not implemented.
-- Multilingual support is not implemented.
-- No authentication layer exists.
-- No database-backed persistence exists.
-- The system depends on YouTube API quota and ML service availability.
-- Running transformer and BERTopic models can require significant compute and memory.
-- PDF report generation is not included.
+In fallback mode, the app can continue using local heuristic logic if the ML service is unavailable. This keeps the app usable during development, but the result is less ML-driven.
 
-## 18. Future Enhancement Opportunities
+Fallback logic includes:
 
-- train stronger domain-specific classifiers for technical relevance and subtopics
-- expand multilingual and code-mixed analysis
-- analyze nested reply threads
-- improve sarcasm and long-context understanding
-- add GPU-aware deployment options
-- add database-backed storage
-- add authentication and saved workspaces
-- support periodic trend monitoring
-- add PDF or shareable report generation
-- expand beyond technology into other content domains
+- Keyword-based technical relevance.
+- Phrase-based demand detection.
+- Keyword-based intent detection.
+- Local sentiment lexicon.
+- TF-IDF/domain-based topic grouping.
 
-## 19. Conclusion
+## 17. Environment Configuration
 
-YTAnalyser is a strong end-to-end machine learning project that turns raw YouTube comments into actionable audience intelligence. It combines data collection, preprocessing, transformer-based inference, semantic topic discovery, ranking, and dashboard presentation in one integrated system.
+Example `.env.local`:
 
-The project is especially valuable because it does not stop at raw model predictions. It answers practical creator questions such as:
+```env
+YOUTUBE_API_KEY=your_youtube_api_key
+ML_SERVICE_URL=http://127.0.0.1:8001
+ML_SERVICE_TIMEOUT_MS=30000
+ML_STRICT_MODE=true
+ANALYSIS_MAX_COMMENTS=300
+CHANNEL_ANALYSIS_MAX_COMMENTS=120
+CHANNEL_ANALYSIS_MAX_VIDEOS=5
+ANALYSIS_INCLUDE_REPLIES=true
+```
 
-- What are viewers asking for?
-- What are viewers struggling with?
-- Which discussion themes appear repeatedly?
-- Which comments show purchase intent?
-- What content should be created next?
+Optional audience Q&A providers:
 
-In its current upgraded state, YTAnalyser is best presented as an ML-first analytics platform with a dedicated inference service, model training workflow, annotation support, and creator-oriented outputs. This makes it suitable both as a strong academic machine learning project and as a foundation for further real-world productization.
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_QA_MODEL=gpt-4o-mini
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_QA_MODEL=claude-3-5-haiku-latest
+```
 
-## 20. File Reference Summary
+Audience Q&A can also run without these provider keys using its local comment-based summary fallback.
 
-- `pages/index.js` - landing page, mode selection, analysis triggers, and session flow
-- `pages/dashboard.js` - dashboard for all major analysis modes and ML status display
-- `pages/annotate.js` - annotation UI for building an intent dataset
-- `pages/api/analyse.js` - main analysis orchestration endpoint
-- `pages/api/compare.js` - comparison analysis flow
-- `pages/api/channel.js` - channel resolution helper
-- `pages/api/trending.js` - recent/trending-style helper
-- `pages/api/export.js` - CSV and JSONL export logic
-- `pages/api/annotations.js` - annotation storage and retrieval
-- `lib/youtube.js` - YouTube data access logic
-- `lib/nlp.js` - text preprocessing and normalization
-- `lib/classifier.js` - ML-based classification coordination and strict mode behavior
-- `lib/domainConfig.js` - domain labels and subtopic definitions
-- `lib/tfidf.js` - topic ranking and ML topic integration
-- `lib/sentiment.js` - sentiment processing, virality, suggestions, and recommendations
-- `lib/mlClient.js` - ML service integration
-- `ml-service/app.py` - FastAPI ML inference service
-- `ml-service/train_intent.py` - training script for intent modeling
-- `ml-service/prepare_intent_dataset.py` - dataset preparation script
-- `ml-service/evaluate_intent.py` - model evaluation script
+Optional Hugging Face intent model:
+
+```env
+HF_INTENT_API_URL=https://api-inference.huggingface.co/models/your-user/your-model
+HF_TOKEN=your_huggingface_token
+```
+
+Optional ML service model configuration:
+
+```env
+SENTIMENT_MODEL_NAME=cardiffnlp/twitter-roberta-base-sentiment
+ZERO_SHOT_MODEL_NAME=facebook/bart-large-mnli
+EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+INTENT_MODEL_PATH=ml-service/models/intent
+INTENT_THRESHOLD=0.35
+```
+
+## 18. How to Run the Project
+
+### 18.1 Install Next.js Dependencies
+
+```powershell
+cd c:\Users\admin\projectSingle\yt-analyzer
+npm install
+```
+
+### 18.2 Start the Next.js App
+
+```powershell
+npm run dev
+```
+
+### 18.3 Install ML Service Dependencies
+
+```powershell
+cd c:\Users\admin\projectSingle\yt-analyzer\ml-service
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+### 18.4 Start the ML Service
+
+From the project root:
+
+```powershell
+npm run ml:dev
+```
+
+Or from `ml-service`:
+
+```powershell
+uvicorn app:app --host 127.0.0.1 --port 8001 --reload
+```
+
+## 19. Model Training Workflow
+
+The project includes a training loop for improving intent classification.
+
+1. Run an analysis in the app.
+2. Open `/annotate`.
+3. Label demand comments manually.
+4. Save labels into `ml-service/data/intent_annotations.json`.
+5. Convert annotations into training and validation JSONL files:
+
+```powershell
+python prepare_intent_dataset.py `
+  --input data\intent_annotations.json `
+  --train-output data\intent_train.jsonl `
+  --valid-output data\intent_valid.jsonl
+```
+
+6. Train the model:
+
+```powershell
+python train_intent.py `
+  --train data\intent_train.jsonl `
+  --valid data\intent_valid.jsonl `
+  --output models\intent
+```
+
+7. Restart the ML service.
+8. The service automatically uses `models/intent` if it exists.
+9. Evaluate the trained model:
+
+```powershell
+python evaluate_intent.py `
+  --test data\intent_valid.jsonl `
+  --model models\intent
+```
+
+## 20. Strengths of the Project
+
+- Complete end-to-end workflow from YouTube input to dashboard output.
+- ML-first design with a separate FastAPI inference service.
+- Strong focus on practical creator decision-making.
+- Supports videos, multiple videos, and channel benchmarks.
+- Includes mobile phone detection, which makes the project more domain-specific.
+- Provides annotation and training support, not just inference.
+- Provides explainable outputs such as topic scores, virality reasoning, and evidence comments.
+- Supports exportable datasets for reporting and model improvement.
+- Has fallback behavior for development while still supporting strict ML mode for final demos.
+
+## 21. Limitations
+
+- Full permanent database storage is not implemented.
+- Analysis results are stored in browser storage, so they are local to one browser.
+- YouTube API quota can limit large-scale usage.
+- ML model downloads and BERTopic processing can require significant time and memory.
+- Current focus is mostly English mobile technology comments.
+- Sarcasm, slang, and mixed-language comments may reduce model accuracy.
+- Zero-shot classification is useful but may be weaker than a well-trained domain model.
+- Comment replies are optional and not treated as full conversation threads.
+- No login system or multi-user workspace exists.
+
+## 22. Future Enhancements
+
+- Add PostgreSQL, MongoDB, or SQLite for persistent analysis storage.
+- Add user authentication and saved workspaces.
+- Add scheduled channel monitoring.
+- Add PDF report generation.
+- Add multilingual and Hinglish/code-mixed comment support.
+- Improve sarcasm and slang detection.
+- Add full reply-thread conversation analysis.
+- Add GPU-aware deployment configuration.
+- Train larger and higher-quality domain-specific intent models.
+- Add topic trend comparison over time.
+- Add creator action tracking after recommendations are generated.
+
+## 23. Conclusion
+
+YTAnalyser is a complete machine learning based YouTube comment intelligence platform for mobile technology content. It collects YouTube metadata and comments, processes the text, applies ML classification and sentiment analysis, discovers topics, detects phone mentions, ranks audience demand, estimates virality, and converts the results into practical creator recommendations.
+
+The project is more than a simple comment classifier. It includes a full data flow, dashboard, export system, annotation database, and training workflow. Its strongest value is that it turns large volumes of unstructured YouTube audience feedback into structured decisions: what viewers want, what they complain about, what phones they discuss, which topics are trending, and what content the creator should make next.

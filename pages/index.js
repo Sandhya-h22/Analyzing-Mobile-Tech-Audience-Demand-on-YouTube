@@ -20,6 +20,9 @@ const TOP_CHANNELS = [
   { id: "UCVYamHliCI9rw1tHR1xbkfw", name: "Dave2D",          avatar: "💻", color: "#00d4ff" },
   { id: "UCddiUEpeqJcYeBxX1IVBKvQ", name: "The Verge",       avatar: "🔬", color: "#10b981" },
   { id: "UCXuqSBlHAE6Xw-yeJA0Tunw", name: "Linus Tech Tips", avatar: "🛠",  color: "#f59e0b" },
+  { id: "UCsTcErHg8oDvUnTzoqsYeNw", name: "Unbox Therapy",   avatar: "📦", color: "#ef4444" },
+  { id: "UCMiJRAwDNSNzuYeN2uWa0pA", name: "Mrwhosetheboss",  avatar: "📷", color: "#06b6d4" },
+  { id: "UC9fSZHEh6XsRpX-xJc6lT3A", name: "JerryRigEverything", avatar: "🔧", color: "#94a3b8" },
 ];
 
 function timeAgo(iso) {
@@ -91,6 +94,7 @@ export default function Home() {
           daysBack,
           domainKey,
           mobileFocus,
+          rankBySubscribers: true,
         }),
       });
       const data = await readApiJson(res);
@@ -98,8 +102,8 @@ export default function Home() {
 
       await saveAnalysisAndHistory(data, {
         type: "channels",
-        label: `Top 5 Mobile Channels${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
-        channels: TOP_CHANNELS.map(c => c.name),
+        label: `Top 5 Subscribed Mobile Channels${mobileFocus.trim() ? ` - ${mobileFocus.trim()}` : ""} - Last ${daysBack} day(s)`,
+        channels: (data.channels || TOP_CHANNELS).map(c => c.name),
         totalVideos: data.aggregate?.totalVideos || 0,
         totalComments: data.aggregate?.totalComments || 0,
       });
@@ -244,7 +248,7 @@ export default function Home() {
           {/* ── Mode Buttons ─────────────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 32, flexWrap: "wrap" }}>
             {[
-              { key: "trending", label: "🔥 Trending Videos",       desc: "Top 5 mobile channels · auto-fetch" },
+              { key: "trending", label: "🔥 Trending Videos",       desc: "Top 5 by subscribers · auto-fetch" },
               { key: "compare",  label: "⚖️ Compare Top 5 Videos",  desc: "Paste up to 5 video URLs"           },
               { key: "benchmark", label: "Benchmark Channels", desc: "Your channel vs competitors" },
               { key: "history",  label: `🕐 Search History ${history.length > 0 ? `(${history.length})` : ""}`, desc: "Your past analyses" },
@@ -318,7 +322,7 @@ export default function Home() {
                     <div key={ch.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--bg3)", border: `1px solid ${ch.color}33`, borderRadius: "var(--radius)", borderLeft: `3px solid ${ch.color}` }}>
                       <span style={{ fontSize: 20 }}>{ch.avatar}</span>
                       <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: ch.color }}>{ch.name}</span>
-                      <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-dim)" }}>Auto-included ✓</span>
+                      <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-dim)" }}>Candidate</span>
                     </div>
                   ))}
                 </div>

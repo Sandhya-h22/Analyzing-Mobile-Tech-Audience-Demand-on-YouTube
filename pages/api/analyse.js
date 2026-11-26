@@ -1,9 +1,9 @@
-import { fetchVideoData, fetchRecentVideos, fetchComments, fetchChannelInfo, resolveChannelId } from "../../lib/youtube.js";
+import { extractVideoId, fetchVideoMetadata, fetchRecentVideos, fetchComments, fetchChannelInfo, resolveChannelId } from "../../lib/youtube.js";
 import { processComments } from "../../lib/nlp.js";
 import { classifyCommentsWithML, bucketComments, groupByPhone } from "../../lib/classifier.js";
 import { analyseTopicsWithML } from "../../lib/tfidf.js";
 import { processAllSentimentsWithML, extractContentSuggestions, computeViralityScore, generateActionableSteps, buildSentimentTimeline, buildPhoneMentions } from "../../lib/sentiment.js";
-import { getDomainOptions, getDomainConfig } from "../../lib/domainConfig.js";
+import { assessMobileVideoRelevance, getDomainOptions, getDomainConfig } from "../../lib/domainConfig.js";
 
 const DEFAULT_MAX_COMMENTS = normalizeConfiguredLimit(process.env.ANALYSIS_MAX_COMMENTS);
 const CHANNEL_MAX_COMMENTS = normalizeConfiguredLimit(process.env.CHANNEL_ANALYSIS_MAX_COMMENTS);
@@ -175,12 +175,40 @@ function mergePhoneMentions(videos = []) {
 }
 
 export async function analyseSingleVideo(url, apiKey, maxComments = DEFAULT_MAX_COMMENTS, domainKey = "tech", mobileFocus = "", options = {}) {
-  const { metadata, comments: rawComments } = await fetchVideoData(url, maxComments, apiKey, {
+  const videoId = extractVideoId(url);
+  if (!videoId) throw new Error("Invalid YouTube URL or video ID");
+  const metadata = await fetchVideoMetadata(videoId, apiKey);
+  const domain = { key: domainKey, ...getDomainConfig(domainKey) };
+  const focus = buildMobileFocus(mobileFocus);
+  const relevance = assessMobileVideoRelevance(metadata);
+  if (!relevance.isRelevant) {
+    return {
+      skipped: true,
+      skipReason: relevance.reason,
+      metadata,
+      stats: { total: metadata.commentCount || 0, analyzedComments: 0, publicCommentCount: metadata.commentCount || 0, topLevelCommentCount: 0, replyCount: 0, viewCount: metadata.viewCount || 0, likeCount: metadata.likeCount || 0, tech: 0, demand: 0, nonTech: 0, techPercent: 0, demandPercent: 0 },
+      topics: [],
+      topKeywords: [],
+      demandComments: [],
+      allComments: [],
+      sentimentStats: { positive: 0, negative: 0, neutral: 0, total: 0, avgScore: 0 },
+      intentSummary: [],
+      suggestions: [],
+      viralityScore: { score: 0, label: "Skipped", reasoning: relevance.reason },
+      actionableSteps: [],
+      sentimentTimeline: [],
+      phoneMentions: [],
+      mobileFocus: focus,
+      domain,
+      domainOptions: getDomainOptions(),
+      relevance,
+    };
+  }
+
+  const rawComments = await fetchComments(videoId, maxComments, apiKey, null, {
     includeReplies: shouldIncludeReplies(options.includeReplies),
     order: options.order || "relevance",
   });
-  const domain = { key: domainKey, ...getDomainConfig(domainKey) };
-  const focus = buildMobileFocus(mobileFocus);
   const publicCommentCount = metadata.commentCount || rawComments.length || 0;
   const replyCount = rawComments.filter((comment) => comment.isReply).length;
   const topLevelCommentCount = rawComments.length - replyCount;
@@ -279,7 +307,7 @@ export async function analyseSingleVideo(url, apiKey, maxComments = DEFAULT_MAX_
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { url, urls, mode = "single", channels, daysBack = 7, domainKey = "tech", mobileFocus = "", maxComments, includeReplies } = req.body;
+  const { url, urls, mode = "single", channels, daysBack = 7, domainKey = "tech", mobileFocus = "", maxComments, includeReplies, rankBySubscribers = false } = req.body;
   const focus = buildMobileFocus(mobileFocus);
   const analysisMaxComments = normalizeLimit(maxComments, DEFAULT_MAX_COMMENTS);
   const channelMaxComments = normalizeLimit(maxComments, CHANNEL_MAX_COMMENTS);
@@ -290,6 +318,7 @@ export default async function handler(req, res) {
     if (mode === "single") {
       if (!url) return res.status(400).json({ error: "URL required" });
       const data = await analyseSingleVideo(url, apiKey, analysisMaxComments, domainKey, mobileFocus, { includeReplies });
+      if (data.skipped) return res.status(400).json({ error: data.skipReason, success: false, mode: "single", ...data });
       return res.status(200).json({ success: true, mode: "single", ...data });
     }
 
@@ -301,9 +330,19 @@ export default async function handler(req, res) {
       );
       const videos = results.map((result, i) =>
         result.status === "fulfilled"
-          ? { ...result.value, url: videoUrls[i] }
+          ? result.value.skipped
+            ? { ...result.value, error: result.value.skipReason, url: videoUrls[i] }
+            : { ...result.value, url: videoUrls[i] }
           : { error: result.reason?.message, url: videoUrls[i], metadata: { title: videoUrls[i] } }
       );
+      if (!videos.some((video) => !video.error)) {
+        return res.status(400).json({
+          success: false,
+          mode: "compare",
+          error: "No mobile-phone related videos found. Paste smartphone/mobile video URLs for this project.",
+          videos,
+        });
+      }
 
       const allDemandComments = videos
         .filter((video) => !video.error)
@@ -340,6 +379,11 @@ export default async function handler(req, res) {
       );
 
       const resolvedChannels = channelInfos.filter((result) => result.status === "fulfilled").map((result) => result.value);
+      const selectedChannels = rankBySubscribers
+        ? [...resolvedChannels]
+          .sort((a, b) => (b.subscriberCount || 0) - (a.subscriberCount || 0))
+          .slice(0, 5)
+        : resolvedChannels;
       const skippedChannels = channelInfos
         .map((result, index) => (
           result.status === "rejected"
@@ -354,7 +398,7 @@ export default async function handler(req, res) {
       if (!resolvedChannels.length) return res.status(400).json({ error: "Could not resolve any channels" });
 
       const videoLists = await Promise.allSettled(
-        resolvedChannels.map((ch) => fetchRecentVideos(ch.id, daysBack, CHANNEL_MAX_VIDEOS, apiKey))
+        selectedChannels.map((ch) => fetchRecentVideos(ch.id, daysBack, CHANNEL_MAX_VIDEOS, apiKey))
       );
 
       const allVideos = [];
@@ -362,8 +406,8 @@ export default async function handler(req, res) {
         if (result.status === "fulfilled") {
           result.value.forEach((video) => allVideos.push({
             ...video,
-            channelName: resolvedChannels[i].name,
-            channelThumbnail: resolvedChannels[i].thumbnail,
+            channelName: selectedChannels[i].name,
+            channelThumbnail: selectedChannels[i].thumbnail,
           }));
         }
       });
@@ -372,7 +416,8 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           mode: "channels",
-          channels: resolvedChannels,
+          channels: selectedChannels,
+          candidateChannels: rankBySubscribers ? resolvedChannels : undefined,
           videos: [],
           allDemandComments: [],
           allComments: [],
@@ -392,10 +437,45 @@ export default async function handler(req, res) {
             channelId: video.channelId,
             publishedAt: video.publishedAt,
             thumbnail: video.thumbnail,
+            description: video.description,
             viewCount: video.viewCount || 0,
             likeCount: video.likeCount || 0,
             commentCount: video.commentCount || 0,
           };
+          const relevance = assessMobileVideoRelevance(metadata);
+          if (!relevance.isRelevant) {
+            return {
+              ...video,
+              metadata,
+              skipped: true,
+              error: "Skipped non-mobile video",
+              errorDetail: relevance.reason,
+              stats: {
+                total: metadata.commentCount || 0,
+                analyzedComments: 0,
+                publicCommentCount: metadata.commentCount || 0,
+                topLevelCommentCount: 0,
+                replyCount: 0,
+                demand: 0,
+                tech: 0,
+                nonTech: 0,
+                viewCount: metadata.viewCount || 0,
+                likeCount: metadata.likeCount || 0,
+              },
+              topics: [],
+              topKeywords: [],
+              sentimentStats: { positive: 0, negative: 0, neutral: 0, total: 0, avgScore: 0 },
+              intentSummary: [],
+              analysisEngine: null,
+              viralityScore: { score: 0, label: "Skipped", reasoning: relevance.reason },
+              suggestions: [],
+              sentimentTimeline: [],
+              phoneMentions: [],
+              allComments: [],
+              demandComments: [],
+              relevance,
+            };
+          }
           const comments = await fetchComments(video.videoId, channelMaxComments, apiKey, null, {
             includeReplies: shouldIncludeReplies(includeReplies),
             order: "relevance",
@@ -458,6 +538,7 @@ export default async function handler(req, res) {
             phoneMentions: filterPhoneMentions(buildPhoneMentions(groupByPhone(withSent), metadata), mobileFocus),
             allComments: withSent.map(sanitize),
             demandComments: sortedDemand.map(sanitize),
+            relevance,
           };
         })
       );
@@ -516,7 +597,8 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         mode: "channels",
-        channels: resolvedChannels,
+        channels: selectedChannels,
+        candidateChannels: rankBySubscribers ? resolvedChannels : undefined,
         skippedChannels,
         videos: videoResults,
         failedVideos,
